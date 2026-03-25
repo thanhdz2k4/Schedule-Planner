@@ -9,6 +9,11 @@ services:
       DATABASE_URL: "${DATABASE_URL:-postgresql://planner:planner@db:5432/schedule_planner}"
       PLANNER_DEFAULT_USER_ID: "${PLANNER_DEFAULT_USER_ID:-00000000-0000-0000-0000-000000000001}"
       PLANNER_DEFAULT_TIMEZONE: "${PLANNER_DEFAULT_TIMEZONE:-Asia/Ho_Chi_Minh}"
+      ROUTER_PROVIDER: "${ROUTER_PROVIDER:-rule}"
+      MISTRAL_API_KEY: "${MISTRAL_API_KEY:-}"
+      MISTRAL_MODEL: "${MISTRAL_MODEL:-mistral-large-latest}"
+      MISTRAL_API_URL: "${MISTRAL_API_URL:-https://api.mistral.ai/v1/chat/completions}"
+      MISTRAL_TIMEOUT_MS: "${MISTRAL_TIMEOUT_MS:-15000}"
     ports:
       - "${APP_PORT:-3000}:3000"
     depends_on:

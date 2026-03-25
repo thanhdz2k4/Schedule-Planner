@@ -1,3 +1,4 @@
+﻿import { resolveUserId } from "@/lib/db/users";
 import { readPlannerState, writePlannerState } from "@/lib/plannerDb";
 import { syncGoalProgress } from "@/lib/plannerStore";
 import { NextResponse } from "next/server";
@@ -15,16 +16,25 @@ function normalizeStateShape(input) {
   return normalized;
 }
 
-export async function GET() {
+function resolveRequestUserId(request, bodyUserId) {
+  const url = new URL(request.url);
+  const fromQuery = url.searchParams.get("userId");
+  const fromHeader = request.headers.get("x-user-id");
+  return resolveUserId(fromQuery || fromHeader || bodyUserId);
+}
+
+export async function GET(request) {
+  const userId = resolveRequestUserId(request);
+
   try {
-    const state = await readPlannerState();
+    const state = await readPlannerState(userId);
     if (!state) {
       return NextResponse.json({ tasks: [], goals: [] });
     }
     return NextResponse.json(state);
   } catch (error) {
     console.error("GET /api/planner failed:", error);
-    return NextResponse.json({ message: "Không thể đọc dữ liệu từ database." }, { status: 500 });
+    return NextResponse.json({ message: "Không th? d?c d? li?u t? database." }, { status: 500 });
   }
 }
 
@@ -33,15 +43,18 @@ export async function PUT(request) {
   try {
     payload = await request.json();
   } catch {
-    return NextResponse.json({ message: "Payload không hợp lệ." }, { status: 400 });
+    return NextResponse.json({ message: "Payload không h?p l?." }, { status: 400 });
   }
+
+  const userId = resolveRequestUserId(request, payload?.userId);
 
   try {
     const state = normalizeStateShape(payload);
-    const saved = await writePlannerState(state);
+    const saved = await writePlannerState(state, userId);
     return NextResponse.json(saved);
   } catch (error) {
     console.error("PUT /api/planner failed:", error);
-    return NextResponse.json({ message: "Không thể lưu dữ liệu vào database." }, { status: 500 });
+    return NextResponse.json({ message: "Không th? luu d? li?u vào database." }, { status: 500 });
   }
 }
+

@@ -1,0 +1,302 @@
+[
+  {
+    "text": "Tạo task họp sprint ngày 2026-03-30 lúc 09:00-10:00",
+    "expected_intent": "create_task",
+    "expected_entities": { "date": "2026-03-30", "start": "09:00", "end": "10:00" },
+    "should_clarify": false
+  },
+  {
+    "text": "Them task code API tu 14h den 16h ngay 30/03/2026",
+    "expected_intent": "create_task",
+    "expected_entities": { "start": "14:00", "end": "16:00", "date": "2026-03-30" },
+    "should_clarify": false
+  },
+  {
+    "text": "Nhắc tôi gửi báo cáo lúc 7h sáng ngày 2026-03-29",
+    "expected_intent": "create_task",
+    "expected_entities": { "start": "07:00", "end": "08:00", "date": "2026-03-29" },
+    "should_clarify": false
+  },
+  {
+    "text": "Add task review PR vao 15:30 ngay 2026-04-01 uu tien cao",
+    "expected_intent": "create_task",
+    "expected_entities": { "priority": "high", "date": "2026-04-01", "start": "15:30" },
+    "should_clarify": false
+  },
+  {
+    "text": "Tạo task đọc sách",
+    "expected_intent": "create_task",
+    "expected_entities": { "title": "đọc sách" },
+    "should_clarify": true
+  },
+  {
+    "text": "Dat lich task call khach hang ngay 2026-04-03",
+    "expected_intent": "create_task",
+    "expected_entities": { "date": "2026-04-03" },
+    "should_clarify": true
+  },
+  {
+    "text": "Tao task fix bug production tu 20h den 22h ngay 2026-03-28",
+    "expected_intent": "create_task",
+    "expected_entities": { "date": "2026-03-28", "start": "20:00", "end": "22:00" },
+    "should_clarify": false
+  },
+  {
+    "text": "Them task hoc SQL luc 19h ngay 2026-03-27",
+    "expected_intent": "create_task",
+    "expected_entities": { "date": "2026-03-27", "start": "19:00", "end": "20:00" },
+    "should_clarify": false
+  },
+  {
+    "text": "Dời task họp sprint sang 10h ngày 2026-03-30",
+    "expected_intent": "update_task",
+    "expected_entities": { "start": "10:00", "date": "2026-03-30" },
+    "should_clarify": false
+  },
+  {
+    "text": "Sửa task code API thành ưu tiên cao",
+    "expected_intent": "update_task",
+    "expected_entities": { "priority": "high" },
+    "should_clarify": false
+  },
+  {
+    "text": "Cập nhật task gửi báo cáo đã xong",
+    "expected_intent": "update_task",
+    "expected_entities": { "status": "done" },
+    "should_clarify": false
+  },
+  {
+    "text": "Đánh dấu task review PR đang làm",
+    "expected_intent": "update_task",
+    "expected_entities": { "status": "doing" },
+    "should_clarify": false
+  },
+  {
+    "text": "Update task hoc SQL",
+    "expected_intent": "update_task",
+    "expected_entities": { "title": "hoc SQL" },
+    "should_clarify": true
+  },
+  {
+    "text": "Doi task fix bug production sang ngay 2026-03-31",
+    "expected_intent": "update_task",
+    "expected_entities": { "date": "2026-03-31" },
+    "should_clarify": false
+  },
+  {
+    "text": "Chuyển task call khách hàng từ 9h sang 11h",
+    "expected_intent": "update_task",
+    "expected_entities": { "start": "09:00", "end": "11:00" },
+    "should_clarify": false
+  },
+  {
+    "text": "Sửa task",
+    "expected_intent": "update_task",
+    "expected_entities": {},
+    "should_clarify": true
+  },
+  {
+    "text": "Xóa task họp sprint",
+    "expected_intent": "delete_task",
+    "expected_entities": { "title": "họp sprint" },
+    "should_clarify": false
+  },
+  {
+    "text": "Delete task review PR",
+    "expected_intent": "delete_task",
+    "expected_entities": { "title": "review PR" },
+    "should_clarify": false
+  },
+  {
+    "text": "Hủy task gửi báo cáo ngày 2026-03-29",
+    "expected_intent": "delete_task",
+    "expected_entities": { "title": "gửi báo cáo" },
+    "should_clarify": false
+  },
+  {
+    "text": "Bo task fix bug production",
+    "expected_intent": "delete_task",
+    "expected_entities": { "title": "fix bug production" },
+    "should_clarify": false
+  },
+  {
+    "text": "Xóa task",
+    "expected_intent": "delete_task",
+    "expected_entities": {},
+    "should_clarify": true
+  },
+  {
+    "text": "Huy task",
+    "expected_intent": "delete_task",
+    "expected_entities": {},
+    "should_clarify": true
+  },
+  {
+    "text": "Hôm nay tôi còn bao nhiêu task chưa làm?",
+    "expected_intent": "query_data",
+    "expected_entities": {},
+    "should_clarify": false
+  },
+  {
+    "text": "Tuần này tổng số giờ làm việc là bao nhiêu?",
+    "expected_intent": "query_data",
+    "expected_entities": {},
+    "should_clarify": false
+  },
+  {
+    "text": "Task ưu tiên cao nào chưa hoàn thành?",
+    "expected_intent": "query_data",
+    "expected_entities": { "priority": "high", "status": "done" },
+    "should_clarify": false
+  },
+  {
+    "text": "Liệt kê task của ngày 2026-03-30",
+    "expected_intent": "query_data",
+    "expected_entities": { "date": "2026-03-30" },
+    "should_clarify": false
+  },
+  {
+    "text": "Ty le hoan thanh 7 ngay gan day",
+    "expected_intent": "query_data",
+    "expected_entities": {},
+    "should_clarify": false
+  },
+  {
+    "text": "Cho toi thong ke viec da xong",
+    "expected_intent": "query_data",
+    "expected_entities": { "status": "done" },
+    "should_clarify": false
+  },
+  {
+    "text": "Con bao nhieu viec high priority",
+    "expected_intent": "query_data",
+    "expected_entities": { "priority": "high" },
+    "should_clarify": false
+  },
+  {
+    "text": "Bao nhieu task toi da lam hom qua",
+    "expected_intent": "query_data",
+    "expected_entities": {},
+    "should_clarify": false
+  },
+  {
+    "text": "Đặt mục tiêu hoàn thành 5 task backend trước ngày 2026-04-10",
+    "expected_intent": "set_goal",
+    "expected_entities": { "target": 5, "deadline": "2026-04-10" },
+    "should_clarify": false
+  },
+  {
+    "text": "Set goal doc sach target 10 den 2026-04-20",
+    "expected_intent": "set_goal",
+    "expected_entities": { "target": 10, "deadline": "2026-04-20" },
+    "should_clarify": false
+  },
+  {
+    "text": "Mục tiêu học SQL 7 buổi",
+    "expected_intent": "set_goal",
+    "expected_entities": { "target": 7 },
+    "should_clarify": false
+  },
+  {
+    "text": "Dat goal fix bug",
+    "expected_intent": "set_goal",
+    "expected_entities": {},
+    "should_clarify": true
+  },
+  {
+    "text": "Muc tieu 12 task den 30/04/2026",
+    "expected_intent": "set_goal",
+    "expected_entities": { "target": 12, "deadline": "2026-04-30" },
+    "should_clarify": true
+  },
+  {
+    "text": "Goal sprint release target 3",
+    "expected_intent": "set_goal",
+    "expected_entities": { "target": 3 },
+    "should_clarify": false
+  },
+  {
+    "text": "Lên kế hoạch cho ngày 2026-03-31",
+    "expected_intent": "plan_day",
+    "expected_entities": { "date": "2026-03-31" },
+    "should_clarify": false
+  },
+  {
+    "text": "Sắp lịch hôm nay cho tôi",
+    "expected_intent": "plan_day",
+    "expected_entities": {},
+    "should_clarify": false
+  },
+  {
+    "text": "Plan day cho 2026-04-02",
+    "expected_intent": "plan_day",
+    "expected_entities": { "date": "2026-04-02" },
+    "should_clarify": false
+  },
+  {
+    "text": "Toi uu lich lam viec ngay 01/04/2026",
+    "expected_intent": "plan_day",
+    "expected_entities": { "date": "2026-04-01" },
+    "should_clarify": false
+  },
+  {
+    "text": "Plan hom nay uu tien viec gap",
+    "expected_intent": "plan_day",
+    "expected_entities": { "priority": "high" },
+    "should_clarify": false
+  },
+  {
+    "text": "Cấu hình nhắc trước 5 phút",
+    "expected_intent": "configure_reminder",
+    "expected_entities": { "minutes_before": 5 },
+    "should_clarify": false
+  },
+  {
+    "text": "Đổi nhắc trước 10 phút cho task",
+    "expected_intent": "configure_reminder",
+    "expected_entities": { "minutes_before": 10 },
+    "should_clarify": false
+  },
+  {
+    "text": "Tat nhac cuoi tuan",
+    "expected_intent": "configure_reminder",
+    "expected_entities": {},
+    "should_clarify": false
+  },
+  {
+    "text": "Chi nhac task uu tien cao",
+    "expected_intent": "configure_reminder",
+    "expected_entities": { "priority": "high" },
+    "should_clarify": false
+  },
+  {
+    "text": "Bat nhac lai",
+    "expected_intent": "configure_reminder",
+    "expected_entities": {},
+    "should_clarify": false
+  },
+  {
+    "text": "Kết nối messenger cho tôi",
+    "expected_intent": "connect_messenger",
+    "expected_entities": {},
+    "should_clarify": false
+  },
+  {
+    "text": "Connect messenger page marketing",
+    "expected_intent": "connect_messenger",
+    "expected_entities": {},
+    "should_clarify": false
+  },
+  {
+    "text": "Liên kết messenger webhook",
+    "expected_intent": "connect_messenger",
+    "expected_entities": {},
+    "should_clarify": false
+  },
+  {
+    "text": "Tôi muốn oauth messenger",
+    "expected_intent": "connect_messenger",
+    "expected_entities": {},
+    "should_clarify": false
+  }
+]

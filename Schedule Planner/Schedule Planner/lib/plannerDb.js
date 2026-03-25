@@ -2,25 +2,13 @@
 import { ensureMigrations } from "@/lib/db/migrate";
 import { listGoalsByUser, replaceGoalsForUser } from "@/lib/db/queries/goalQueries";
 import { listTasksByUser, replaceTasksForUser } from "@/lib/db/queries/taskQueries";
+import { DEFAULT_USER_ID, DEFAULT_USER_TIMEZONE, ensureUserExists, resolveUserId } from "@/lib/db/users";
 import { syncGoalProgress } from "@/lib/plannerStore";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const VALID_STATUSES = new Set(["todo", "doing", "done"]);
 const VALID_PRIORITIES = new Set(["high", "medium", "low"]);
 const VALID_PRIORITY_SOURCES = new Set(["manual", "rule", "ai"]);
-const FALLBACK_USER_ID = "00000000-0000-0000-0000-000000000001";
-const FALLBACK_TIMEZONE = "Asia/Ho_Chi_Minh";
-
-const DEFAULT_USER_ID =
-  typeof process.env.PLANNER_DEFAULT_USER_ID === "string" &&
-  UUID_REGEX.test(process.env.PLANNER_DEFAULT_USER_ID)
-    ? process.env.PLANNER_DEFAULT_USER_ID
-    : FALLBACK_USER_ID;
-
-const DEFAULT_TIMEZONE =
-  typeof process.env.PLANNER_DEFAULT_TIMEZONE === "string" && process.env.PLANNER_DEFAULT_TIMEZONE.trim()
-    ? process.env.PLANNER_DEFAULT_TIMEZONE.trim()
-    : FALLBACK_TIMEZONE;
 
 let schemaReady;
 
@@ -168,6 +156,10 @@ function normalizeStateShape(input) {
   return normalized;
 }
 
+function normalizeRequestedUserId(rawUserId) {
+  return resolveUserId(rawUserId);
+}
+
 async function ensureSchema() {
   if (!schemaReady) {
     schemaReady = ensureMigrations().catch((error) => {
@@ -179,26 +171,18 @@ async function ensureSchema() {
   return schemaReady;
 }
 
-async function ensureDefaultUser(db) {
-  await db.query(
-    `
-      INSERT INTO users (id, timezone)
-      VALUES ($1::uuid, $2)
-      ON CONFLICT (id)
-      DO UPDATE SET timezone = EXCLUDED.timezone, updated_at = NOW()
-    `,
-    [DEFAULT_USER_ID, DEFAULT_TIMEZONE]
-  );
+async function ensurePlannerUser(db, userId) {
+  await ensureUserExists(db, userId, DEFAULT_USER_TIMEZONE);
 }
 
-async function hasRelationalData(db) {
+async function hasRelationalData(db, userId) {
   const result = await db.query(
     `
       SELECT
         EXISTS(SELECT 1 FROM tasks WHERE user_id = $1::uuid) AS has_tasks,
         EXISTS(SELECT 1 FROM goals WHERE user_id = $1::uuid) AS has_goals
     `,
-    [DEFAULT_USER_ID]
+    [userId]
   );
 
   if (!result.rowCount) {
@@ -213,8 +197,12 @@ async function hasLegacyJsonTable(db) {
   return Boolean(result.rows?.[0]?.table_name);
 }
 
-async function migrateLegacyPlannerStateIfNeeded(db) {
-  if (await hasRelationalData(db)) {
+async function migrateLegacyPlannerStateIfNeeded(db, userId) {
+  if (userId !== DEFAULT_USER_ID) {
+    return;
+  }
+
+  if (await hasRelationalData(db, userId)) {
     return;
   }
 
@@ -232,28 +220,26 @@ async function migrateLegacyPlannerStateIfNeeded(db) {
     return;
   }
 
-  await replaceGoalsForUser(db, DEFAULT_USER_ID, normalized.goals);
-  await replaceTasksForUser(db, DEFAULT_USER_ID, normalized.tasks);
+  await replaceGoalsForUser(db, userId, normalized.goals);
+  await replaceTasksForUser(db, userId, normalized.tasks);
 }
 
-async function readStateFromRelationalTables(db) {
-  const [tasks, goals] = await Promise.all([
-    listTasksByUser(db, DEFAULT_USER_ID),
-    listGoalsByUser(db, DEFAULT_USER_ID),
-  ]);
+async function readStateFromRelationalTables(db, userId) {
+  const [tasks, goals] = await Promise.all([listTasksByUser(db, userId), listGoalsByUser(db, userId)]);
 
   const state = { tasks, goals };
   syncGoalProgress(state);
   return state;
 }
 
-export async function readPlannerState() {
+export async function readPlannerState(rawUserId) {
+  const userId = normalizeRequestedUserId(rawUserId);
   await ensureSchema();
 
   const state = await withTransaction(async (db) => {
-    await ensureDefaultUser(db);
-    await migrateLegacyPlannerStateIfNeeded(db);
-    return readStateFromRelationalTables(db);
+    await ensurePlannerUser(db, userId);
+    await migrateLegacyPlannerStateIfNeeded(db, userId);
+    return readStateFromRelationalTables(db, userId);
   });
 
   if (!state.tasks.length && !state.goals.length) {
@@ -263,14 +249,16 @@ export async function readPlannerState() {
   return state;
 }
 
-export async function writePlannerState(input) {
+export async function writePlannerState(input, rawUserId) {
+  const userId = normalizeRequestedUserId(rawUserId);
   await ensureSchema();
   const normalized = normalizeStateShape(input);
 
   return withTransaction(async (db) => {
-    await ensureDefaultUser(db);
-    await replaceGoalsForUser(db, DEFAULT_USER_ID, normalized.goals);
-    await replaceTasksForUser(db, DEFAULT_USER_ID, normalized.tasks);
-    return readStateFromRelationalTables(db);
+    await ensurePlannerUser(db, userId);
+    await replaceGoalsForUser(db, userId, normalized.goals);
+    await replaceTasksForUser(db, userId, normalized.tasks);
+    return readStateFromRelationalTables(db, userId);
   });
 }
+

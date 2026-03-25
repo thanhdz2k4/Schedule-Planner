@@ -1,10 +1,12 @@
-# Phase 2 - Intern Router (Rule-based Trước)
+﻿# Phase 2 - Intern Router (Rule-based + LLM Adapter)
 
 ## 1. Mục tiêu
 
 - Nhận câu nói user và phân loại đúng intent.
 - Trích xuất entity đủ để workflow chạy được.
 - Có cơ chế hỏi lại khi câu mơ hồ.
+- Hỗ trợ **multi-turn context** để xử lý câu follow-up ngắn.
+- Có thể chọn provider: `rule`, `mistral`, `auto`.
 
 ## 2. Phạm vi
 
@@ -13,11 +15,13 @@ Trong phase này làm:
 - Router rule-based.
 - Entity extraction cơ bản.
 - Confidence + fallback clarification.
+- Adapter gọi LLM (Mistral) cho classify intent.
+- Context merge giữa turn trước và turn hiện tại.
 
 Chưa làm:
 
-- LLM classification.
-- Workflow thực thi business logic sâu.
+- Workflow business logic sâu (phase 3).
+- Session manager dài hạn trong DB (phase sau).
 
 ## 3. Danh sách intent v1
 
@@ -32,33 +36,72 @@ Chưa làm:
 
 ## 4. Input/Output contract
 
-### Input
+### 4.1 Input cơ bản
 
 ```json
 {
   "userId": "uuid",
+  "provider": "rule",
   "text": "Thêm task họp sprint lúc 9h sáng mai"
 }
 ```
 
-### Output
+### 4.2 Input có context (follow-up)
+
+```json
+{
+  "userId": "uuid",
+  "provider": "mistral",
+  "text": "kéo dài 1 tiếng, ưu tiên cao, nhắc trước 5 phút",
+  "context": {
+    "intent": "create_task",
+    "entities": {
+      "title": "họp sprint",
+      "date": "2026-03-25",
+      "start": "09:00"
+    },
+    "last_user_text": "Tạo task họp sprint ngày hôm nay lúc 9 giờ sáng",
+    "last_agent_question": "Task kéo dài bao lâu? Có cần đặt mức độ ưu tiên hoặc nhắc nhở trước không?"
+  }
+}
+```
+
+### 4.3 Output thành công
 
 ```json
 {
   "intent": "create_task",
-  "confidence": 0.91,
+  "confidence": 0.92,
   "entities": {
     "title": "họp sprint",
-    "date": "2026-03-26",
+    "date": "2026-03-25",
     "start": "09:00",
-    "end": "10:00"
+    "end": "10:00",
+    "duration_minutes": 60,
+    "priority": "high",
+    "minutes_before": 5
   },
   "need_clarification": false,
-  "clarifying_question": null
+  "clarifying_question": null,
+  "source": "mistral",
+  "context_for_next_turn": {
+    "intent": "create_task",
+    "entities": {
+      "title": "họp sprint",
+      "date": "2026-03-25",
+      "start": "09:00",
+      "end": "10:00",
+      "duration_minutes": 60,
+      "priority": "high",
+      "minutes_before": 5
+    },
+    "last_user_text": "kéo dài 1 tiếng, ưu tiên cao, nhắc trước 5 phút",
+    "last_agent_question": null
+  }
 }
 ```
 
-### Output khi mơ hồ
+### 4.4 Output khi mơ hồ
 
 ```json
 {
@@ -66,11 +109,18 @@ Chưa làm:
   "confidence": 0.52,
   "entities": { "title": "họp" },
   "need_clarification": true,
-  "clarifying_question": "Bạn muốn dời task họp nào? Vui lòng kèm giờ hoặc ngày."
+  "clarifying_question": "Bạn muốn dời task họp nào? Vui lòng kèm giờ hoặc ngày.",
+  "source": "rule",
+  "context_for_next_turn": {
+    "intent": "update_task",
+    "entities": { "title": "họp" },
+    "last_user_text": "Sửa task họp",
+    "last_agent_question": "Bạn muốn dời task họp nào? Vui lòng kèm giờ hoặc ngày."
+  }
 }
 ```
 
-## 5. Cấu trúc code đề xuất
+## 5. Cấu trúc code
 
 ```text
 lib/agent/router/
@@ -78,80 +128,71 @@ lib/agent/router/
   entityExtractors.js
   confidence.js
   clarify.js
+  llmRouter.js
   index.js
 app/api/agent/route/route.js
 tests/router/
   router.test.json
 ```
 
-## 6. Các bước thực hành chi tiết
+## 6. Luồng xử lý
 
-### Bước 1 - Intent rule engine
+### Bước 1 - Chọn provider
 
-- Mỗi intent có danh sách pattern.
-- Match theo từ khóa + ngữ cảnh thời gian.
+- `provider=rule` -> rule-based.
+- `provider=mistral` -> bắt buộc dùng Mistral (nếu lỗi thì trả lỗi).
+- `provider=auto` -> ưu tiên Mistral, lỗi thì fallback rule.
 
-### Bước 2 - Entity extractor
+### Bước 2 - Parse turn hiện tại
 
-- Parse:
-  - `date`, `start`, `end`
-  - `title`
-  - `priority`
-  - `status`
-- Nếu thiếu dữ liệu bắt buộc -> đánh dấu cần hỏi lại.
+- Parse `date`, `start`, `end`, `duration_minutes`, `priority`, `status`, `target`, `deadline`.
 
-### Bước 3 - Confidence score
+### Bước 3 - Merge context
 
-- Điểm theo số pattern match + số entity parse được.
-- Có threshold ví dụ:
-  - `>= 0.65`: execute.
-  - `< 0.65`: clarify.
+- Merge `context.entities` với entity mới.
+- Entity mới ưu tiên override entity cũ.
+- Nếu có `start + duration_minutes` thì tự tính `end`.
 
-### Bước 4 - Clarification strategy
+### Bước 4 - Confidence + clarification
 
-- Tạo câu hỏi follow-up theo intent.
-- Không gọi workflow khi chưa rõ dữ liệu.
+- Nếu thiếu field bắt buộc hoặc confidence thấp -> hỏi lại.
+- Trả `context_for_next_turn` để frontend dùng ngay cho lượt tiếp theo.
 
 ### Bước 5 - Logging
 
-- Lưu router result vào `agent_runs` hoặc log file.
+- Lưu kết quả router vào `agent_runs`.
 
-## 7. Bộ test tối thiểu
+## 7. Gợi ý frontend integration
 
-- 50 câu test:
-  - mỗi intent >= 5 câu
-  - câu mơ hồ >= 8 câu
-  - câu đa ý định >= 5 câu
+1. Gửi request `/api/agent/route`.
+2. Nếu `need_clarification=true`, hiển thị `clarifying_question`.
+3. User trả lời câu bổ sung.
+4. Gửi request mới với `text=user_reply` + `context=context_for_next_turn`.
+5. Khi `need_clarification=false` thì chuyển sang workflow execute.
 
-Ví dụ dataset fields:
+## 8. Bộ test tối thiểu
 
-- `text`
-- `expected_intent`
-- `expected_entities` (một phần)
-- `should_clarify`
-
-## 8. Kiểm thử chất lượng
-
-- Accuracy theo intent.
-- Clarification precision:
-  - có thật sự thiếu dữ liệu mới hỏi lại.
+- 50 câu test intent cơ bản (đã có `tests/router/router.test.json`).
+- Thêm test hội thoại 2 turn cho follow-up:
+  - turn 1 thiếu end.
+  - turn 2 chỉ nói duration/priority/reminder.
 
 ## 9. Lỗi thường gặp và cách xử lý
 
 | Lỗi | Nguyên nhân | Cách xử lý |
 |---|---|---|
-| Nhầm `query_data` thành `create_task` | Pattern quá rộng | Tách rule theo động từ chính |
-| Parse giờ sai | Regex không cover dạng tự nhiên | Bổ sung parser cho "chiều", "tối", "mai" |
-| Hỏi lại quá nhiều | Threshold quá cao | Hiệu chỉnh confidence |
+| Follow-up bị rơi về `query_data` | Không gửi `context` | Bắt buộc gửi `context_for_next_turn` |
+| Vẫn thiếu `end` sau follow-up | Không parse được duration | Bổ sung regex duration hoặc user nói rõ `đến 10h` |
+| `provider=mistral` nhưng chạy rule | Thiếu/ sai `MISTRAL_API_KEY` hoặc timeout | Kiểm tra env + logs app |
 
 ## 10. Tiêu chí hoàn thành
 
-- Router trả JSON đúng schema.
-- Pass bộ test nội bộ.
-- Có fallback rõ khi confidence thấp.
+- Router trả JSON đúng schema mới.
+- Multi-turn context chạy được end-to-end.
+- Có fallback rõ khi provider lỗi.
 
 ## 11. Output cần nộp
 
-- File rules.
+- File rules + adapter LLM.
 - Dataset test.
-- Báo cáo accuracy ngắn.
+- Demo 1 kịch bản follow-up có context.

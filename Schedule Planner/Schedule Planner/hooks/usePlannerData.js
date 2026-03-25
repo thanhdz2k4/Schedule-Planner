@@ -1,6 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getOrCreateAnonymousUserId } from "@/lib/anonymousUser";
 import {
   THEME_KEY,
   hasOverlap,
@@ -19,25 +20,29 @@ function normalizeStateShape(input) {
   };
 }
 
-async function fetchServerState() {
-  const response = await fetch("/api/planner", { cache: "no-store" });
+function buildPlannerApiUrl(userId) {
+  return `/api/planner?userId=${encodeURIComponent(userId)}`;
+}
+
+async function fetchServerState(userId) {
+  const response = await fetch(buildPlannerApiUrl(userId), { cache: "no-store" });
   if (!response.ok) {
-    throw new Error("Không thể tải dữ liệu từ database.");
+    throw new Error("Khong the tai du lieu tu database.");
   }
 
   const payload = await response.json();
   return normalizeStateShape(payload);
 }
 
-async function saveServerState(state) {
-  const response = await fetch("/api/planner", {
+async function saveServerState(userId, state) {
+  const response = await fetch(buildPlannerApiUrl(userId), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(state),
   });
 
   if (!response.ok) {
-    throw new Error("Không thể lưu dữ liệu vào database.");
+    throw new Error("Khong the luu du lieu vao database.");
   }
 }
 
@@ -45,29 +50,36 @@ export function usePlannerData() {
   const [state, setState] = useState({ tasks: [], goals: [] });
   const [loaded, setLoaded] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [userId, setUserId] = useState("");
   const syncErrorShown = useRef(false);
 
   useEffect(() => {
     let active = true;
 
     async function bootstrap() {
+      const resolvedUserId = getOrCreateAnonymousUserId();
+      if (!resolvedUserId) {
+        return;
+      }
+
       const localState = loadState();
       let nextState = localState;
 
       try {
-        const serverState = await fetchServerState();
+        const serverState = await fetchServerState(resolvedUserId);
         const hasServerData = serverState.tasks.length > 0 || serverState.goals.length > 0;
 
         if (hasServerData) {
           nextState = serverState;
         } else {
-          await saveServerState(localState);
+          await saveServerState(resolvedUserId, localState);
         }
       } catch {
         nextState = localState;
       }
 
       if (!active) return;
+      setUserId(resolvedUserId);
       setState(nextState);
       saveState(nextState);
 
@@ -85,14 +97,14 @@ export function usePlannerData() {
   }, []);
 
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !userId) return;
 
     saveState(state);
 
     let active = true;
     async function persistToServer() {
       try {
-        await saveServerState(state);
+        await saveServerState(userId, state);
         if (active) {
           syncErrorShown.current = false;
         }
@@ -108,14 +120,14 @@ export function usePlannerData() {
     return () => {
       active = false;
     };
-  }, [state, loaded]);
+  }, [state, loaded, userId]);
 
   const actions = useMemo(
     () => ({
       addTask(payload) {
         const next = { ...state, tasks: [...state.tasks] };
         if (hasOverlap(next.tasks, payload)) {
-          return { ok: false, message: "Task bị trùng giờ trong cùng ngày." };
+          return { ok: false, message: "Task bi trung gio trong cung ngay." };
         }
 
         next.tasks.push({ id: crypto.randomUUID(), ...payload });
@@ -126,7 +138,7 @@ export function usePlannerData() {
       updateTask(id, payload) {
         const next = { ...state, tasks: [...state.tasks] };
         if (hasOverlap(next.tasks, payload, id)) {
-          return { ok: false, message: "Task bị trùng giờ trong cùng ngày." };
+          return { ok: false, message: "Task bi trung gio trong cung ngay." };
         }
 
         next.tasks = next.tasks.map((task) => (task.id === id ? { ...task, ...payload } : task));
@@ -162,7 +174,7 @@ export function usePlannerData() {
         };
 
         if (hasOverlap(state.tasks, payload, id)) {
-          return { ok: false, message: "Không thể kéo vì bị trùng giờ." };
+          return { ok: false, message: "Khong the keo vi bi trung gio." };
         }
 
         return this.updateTask(id, payload);
@@ -214,7 +226,9 @@ export function usePlannerData() {
   return {
     loaded,
     darkMode,
+    userId,
     state: computed,
     actions,
   };
 }
+

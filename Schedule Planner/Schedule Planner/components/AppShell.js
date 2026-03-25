@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: "/calendar", label: "Lịch tháng" },
   { href: "/focus", label: "Tập trung" },
   { href: "/reminders", label: "Nhắc việc" },
+  { href: "/agent-lab", label: "Agent Lab" },
 ];
 
 export default function AppShell({ title, subtitle, quote, goalProgress, themeLabel, onToggleTheme, children }) {
@@ -80,3 +81,4 @@ export default function AppShell({ title, subtitle, quote, goalProgress, themeLa
     </div>
   );
 }
+

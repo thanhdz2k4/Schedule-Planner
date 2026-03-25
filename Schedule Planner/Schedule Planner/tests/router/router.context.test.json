@@ -1,0 +1,61 @@
+[
+  {
+    "name": "create_task_followup_duration_priority_reminder",
+    "turn_1": {
+      "text": "Tạo task họp sprint ngày hôm nay lúc 9 giờ sáng",
+      "expected": {
+        "intent": "create_task",
+        "need_clarification": true
+      }
+    },
+    "turn_2": {
+      "text": "kéo dài 1 tiếng, ưu tiên cao, nhắc trước 5 phút",
+      "use_context_from_turn_1": true,
+      "expected_entities_contains": {
+        "title": "họp sprint",
+        "start": "09:00",
+        "end": "10:00",
+        "priority": "high",
+        "minutes_before": 5
+      },
+      "expected_need_clarification": false
+    }
+  },
+  {
+    "name": "update_task_followup_status_only",
+    "turn_1": {
+      "text": "Sửa task code API",
+      "expected": {
+        "intent": "update_task",
+        "need_clarification": true
+      }
+    },
+    "turn_2": {
+      "text": "đánh dấu đã xong",
+      "use_context_from_turn_1": true,
+      "expected_entities_contains": {
+        "title": "code API",
+        "status": "done"
+      },
+      "expected_need_clarification": false
+    }
+  },
+  {
+    "name": "configure_reminder_followup_offset",
+    "turn_1": {
+      "text": "Cấu hình nhắc cho task họp",
+      "expected": {
+        "intent": "configure_reminder",
+        "need_clarification": true
+      }
+    },
+    "turn_2": {
+      "text": "nhắc trước 10 phút",
+      "use_context_from_turn_1": true,
+      "expected_entities_contains": {
+        "minutes_before": 10
+      },
+      "expected_need_clarification": false
+    }
+  }
+]

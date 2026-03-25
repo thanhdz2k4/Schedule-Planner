@@ -6,7 +6,9 @@ services:
     container_name: schedule-planner-app
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://planner:planner@db:5432/schedule_planner
+      DATABASE_URL: "${DATABASE_URL:-postgresql://planner:planner@db:5432/schedule_planner}"
+      PLANNER_DEFAULT_USER_ID: "${PLANNER_DEFAULT_USER_ID:-00000000-0000-0000-0000-000000000001}"
+      PLANNER_DEFAULT_TIMEZONE: "${PLANNER_DEFAULT_TIMEZONE:-Asia/Ho_Chi_Minh}"
     ports:
       - "${APP_PORT:-3000}:3000"
     depends_on:
@@ -18,15 +20,15 @@ services:
     image: postgres:16-alpine
     container_name: schedule-planner-db
     environment:
-      POSTGRES_DB: schedule_planner
-      POSTGRES_USER: planner
-      POSTGRES_PASSWORD: planner
+      POSTGRES_DB: "${POSTGRES_DB:-schedule_planner}"
+      POSTGRES_USER: "${POSTGRES_USER:-planner}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-planner}"
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
       - planner_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U planner -d schedule_planner"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10

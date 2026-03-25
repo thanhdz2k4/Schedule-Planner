@@ -1,0 +1,16 @@
+INSERT INTO users (id, timezone)
+VALUES ('00000000-0000-0000-0000-000000000001', 'Asia/Ho_Chi_Minh')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO goals (id, user_id, title, target, deadline)
+VALUES
+  ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Hoan thanh 10 task high priority', 10, CURRENT_DATE + INTERVAL '14 days'),
+  ('10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'Luyen tap SQL template query', 6, CURRENT_DATE + INTERVAL '7 days')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO tasks (id, user_id, title, date, start_time, end_time, status, priority, priority_source, goal_id)
+VALUES
+  ('20000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Code API planner', CURRENT_DATE, '09:00', '10:30', 'doing', 'high', 'manual', '10000000-0000-0000-0000-000000000001'),
+  ('20000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'Review workflow intent router', CURRENT_DATE, '14:00', '15:00', 'todo', 'medium', 'rule', '10000000-0000-0000-0000-000000000002'),
+  ('20000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', 'Tong hop bao cao ngay', CURRENT_DATE, '17:00', '17:45', 'todo', 'low', 'manual', NULL)
+ON CONFLICT (id) DO NOTHING;

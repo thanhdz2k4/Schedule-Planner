@@ -11,8 +11,24 @@ const PROVIDERS = [
   { value: "rule", label: "Rule" },
 ];
 
-function resultSummary(result) {
+const RUN_MODES = [
+  { value: "workflow", label: "Route + Execute" },
+  { value: "route", label: "Route only" },
+];
+
+function resultSummary(result, runMode) {
   if (!result) return "";
+
+  if (runMode === "workflow") {
+    if (result.ok && result.execution?.result?.message) {
+      return result.execution.result.message;
+    }
+    if (!result.ok && result.stage === "routing") {
+      return result.message || result.route?.clarifying_question || "Cần bổ sung thêm thông tin.";
+    }
+    return result.execution?.error?.message || "Workflow không thể chạy.";
+  }
+
   if (result.need_clarification) {
     return result.clarifying_question || "Cần bổ sung thêm thông tin.";
   }
@@ -22,6 +38,7 @@ function resultSummary(result) {
 
 export default function AgentLabPage() {
   const { loaded, darkMode, userId, state, actions } = usePlannerData();
+  const [runMode, setRunMode] = useState("workflow");
   const [provider, setProvider] = useState("auto");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -57,7 +74,8 @@ export default function AgentLabPage() {
     setHistory((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text: trimmed }]);
 
     try {
-      const response = await fetch("/api/agent/route", {
+      const endpoint = runMode === "workflow" ? "/api/agent/workflow/execute" : "/api/agent/route";
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -73,14 +91,14 @@ export default function AgentLabPage() {
         throw new Error(payload?.message || "Không thể gọi router.");
       }
 
-      const nextContext = payload.context_for_next_turn || null;
+      const nextContext = payload?.context_for_next_turn || payload?.route?.context_for_next_turn || null;
       setContext(nextContext);
       setHistory((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: resultSummary(payload),
+          text: resultSummary(payload, runMode),
           result: payload,
         },
       ]);
@@ -134,6 +152,11 @@ export default function AgentLabPage() {
         </div>
 
         <form className="agent-form" onSubmit={submitPrompt}>
+          <select value={runMode} onChange={(event) => setRunMode(event.target.value)}>
+            {RUN_MODES.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
           <select value={provider} onChange={(event) => setProvider(event.target.value)}>
             {PROVIDERS.map((item) => (
               <option key={item.value} value={item.value}>{item.label}</option>

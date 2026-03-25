@@ -1,0 +1,70 @@
+[
+  {
+    "name": "create_task_success",
+    "request": {
+      "intent": "create_task",
+      "entities": {
+        "title": "test create workflow",
+        "date": "2026-03-25",
+        "start": "09:00",
+        "end": "10:00",
+        "priority": "high",
+        "minutes_before": 5
+      }
+    },
+    "expect": {
+      "ok": true
+    }
+  },
+  {
+    "name": "create_task_fail_overlap",
+    "request": {
+      "intent": "create_task",
+      "entities": {
+        "title": "test overlap",
+        "date": "2026-03-25",
+        "start": "09:30",
+        "end": "10:30"
+      }
+    },
+    "expect": {
+      "ok": false,
+      "error_code": "TASK_TIME_OVERLAP"
+    }
+  },
+  {
+    "name": "update_task_success",
+    "request": {
+      "intent": "update_task",
+      "entities": {
+        "title": "test create workflow",
+        "status": "done"
+      }
+    },
+    "expect": {
+      "ok": true
+    }
+  },
+  {
+    "name": "delete_task_success",
+    "request": {
+      "intent": "delete_task",
+      "entities": {
+        "title": "test create workflow"
+      }
+    },
+    "expect": {
+      "ok": true
+    }
+  },
+  {
+    "name": "query_data_success",
+    "request": {
+      "intent": "query_data",
+      "text": "Hom nay toi con bao nhieu task chua lam"
+    },
+    "expect": {
+      "ok": true
+    }
+  }
+]

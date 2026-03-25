@@ -1,49 +1,44 @@
 # Phase 3 - Workflow Engine v1
 
-## 1. Mục tiêu
+## 1. Muc tieu
 
-- Thực thi workflow đúng theo intent từ router.
-- Tách step rõ ràng để dễ debug và mở rộng.
-- Có log run-level và step-level.
-
-## 2. Phạm vi
-
-Trong phase này làm:
-
-- Workflow engine core.
-- 4 workflow chính:
+- Thuc thi workflow theo intent da route.
+- Tach step ro rang de debug va mo rong.
+- Co run-level log + step-level log.
+- Ho tro 4 workflow chinh:
   - `create_task`
   - `update_task`
   - `delete_task`
-  - `query_data` (bản đơn giản)
+  - `query_data` (ban SQL template don gian)
 
-Chưa làm:
+## 2. Pham vi da implement
 
-- Text-to-SQL nâng cao.
-- Messenger integration.
+Da lam:
 
-## 3. Thiết kế engine v1
+- Core engine: runner + step logging + error mapping.
+- Workflow registry va 4 workflow.
+- API execute:
+  - `POST /api/agent/workflow/execute`
+- Logging cho `agent_runs`:
+  - `run_type`
+  - `status`
+  - `output_json`
+  - `error_message`
+  - `duration_ms`
+  - `step_logs`
 
-### 3.1 Khái niệm
+Chua lam trong phase nay:
 
-- `Workflow`: tập các step theo intent.
-- `Step`: hàm có input/output rõ ràng.
-- `Context`: dữ liệu chạy xuyên suốt workflow.
+- Text-to-SQL nang cao.
+- Messenger workflow.
 
-### 3.2 Interface đề xuất
-
-```js
-async function executeWorkflow({ userId, intent, entities, text }) {
-  // return { ok, intent, result, logs, error? }
-}
-```
-
-## 4. Cấu trúc code đề xuất
+## 3. Cau truc code
 
 ```text
 lib/agent/workflow-engine/
   index.js
   registry.js
+  errors.js
   steps/
     validateInput.js
     checkOverlap.js
@@ -55,78 +50,176 @@ lib/agent/workflow-engine/
     deleteTaskWorkflow.js
     queryDataWorkflow.js
 app/api/agent/workflow/execute/route.js
+db/migrations/003_agent_runs_workflow_columns.sql
+tests/workflow/workflow.test.json
 ```
 
-## 5. Flow từng workflow
+## 4. API contract
 
-### 5.1 `create_task`
+### 4.1 Request
 
-1. Validate fields (`title`, `date`, `start`, `end`).
-2. Check overlap.
-3. Save task.
-4. (Optional) enqueue reminder job.
-5. Format response.
+Co 2 cach:
 
-### 5.2 `update_task`
+1. Route + execute (gui `text`):
 
-1. Resolve task target.
-2. Validate patch.
-3. Check overlap sau khi sửa.
-4. Update DB.
-5. Rebuild reminder job.
+```json
+{
+  "userId": "00000000-0000-0000-0000-000000000001",
+  "provider": "auto",
+  "text": "Tao task hop sprint ngay mai tu 09:00 den 10:00"
+}
+```
 
-### 5.3 `delete_task`
+2. Execute truc tiep (gui `intent` + `entities`):
 
-1. Resolve task target.
-2. Delete task.
-3. Cancel reminder job liên quan.
-4. Format response.
+```json
+{
+  "userId": "00000000-0000-0000-0000-000000000001",
+  "intent": "create_task",
+  "entities": {
+    "title": "hop sprint",
+    "date": "2026-03-26",
+    "start": "09:00",
+    "end": "10:00",
+    "priority": "high",
+    "minutes_before": 5
+  }
+}
+```
 
-### 5.4 `query_data` v1
+### 4.2 Response success
 
-1. Map query type từ entities/router.
-2. Chạy SQL template.
-3. Format summary text.
+```json
+{
+  "ok": true,
+  "route": {
+    "intent": "create_task",
+    "entities": { "...": "..." },
+    "need_clarification": false
+  },
+  "execution": {
+    "ok": true,
+    "intent": "create_task",
+    "result": {
+      "message": "Created task ...",
+      "task": { "...": "..." },
+      "reminder": { "...": "..." }
+    },
+    "logs": [
+      { "step": "validate_input", "status": "success" },
+      { "step": "check_overlap", "status": "success" },
+      { "step": "save_task", "status": "success" },
+      { "step": "schedule_reminder", "status": "success" },
+      { "step": "format_reply", "status": "success" }
+    ],
+    "run_id": "uuid",
+    "duration_ms": 42
+  }
+}
+```
 
-## 6. Log và trace
+### 4.3 Response clarification (routing stage)
 
-Lưu vào `agent_runs`:
+```json
+{
+  "ok": false,
+  "stage": "routing",
+  "route": {
+    "need_clarification": true,
+    "clarifying_question": "..."
+  }
+}
+```
 
-- `intent`
-- `input_text`
-- `status` (`started`, `success`, `failed`)
-- `output_json`
-- `error_message`
-- `duration_ms`
+### 4.4 Response business fail
 
-## 7. Error handling
+- HTTP 4xx
+- `execution.error.type = "business"`
 
-- Lỗi business (overlap, thiếu data): trả 4xx + message rõ.
-- Lỗi system (DB timeout): trả 5xx + mã lỗi nội bộ.
-- Không nuốt lỗi im lặng.
+```json
+{
+  "ok": false,
+  "stage": "workflow",
+  "execution": {
+    "ok": false,
+    "error": {
+      "type": "business",
+      "code": "TASK_TIME_OVERLAP",
+      "status": 409,
+      "message": "Task time overlaps with an existing task."
+    }
+  }
+}
+```
 
-## 8. Kiểm thử tối thiểu
+## 5. Flow tung workflow
 
-- 1 test success + 1 test fail cho mỗi workflow.
-- Test integration route `/api/agent/workflow/execute`.
-- Test idempotency cho request lặp lại (nếu có).
+### 5.1 create_task
 
-## 9. Lỗi thường gặp và cách xử lý
+1. `validate_input`
+2. `check_overlap`
+3. `save_task`
+4. `schedule_reminder` (neu co `minutes_before`)
+5. `format_reply`
 
-| Lỗi | Nguyên nhân | Cách xử lý |
-|---|---|---|
-| Workflow chạy sai intent | Router trả sai hoặc engine không validate | Verify `intent` trước execute |
-| Step fail nhưng không có log | Thiếu logging wrapper | Bọc step bằng middleware log |
-| Update task không rebuild reminder | Thiếu hook sau update | Thêm step post-update bắt buộc |
+### 5.2 update_task
 
-## 10. Tiêu chí hoàn thành
+1. `resolve_task_target`
+2. `validate_patch`
+3. `check_overlap` (neu co doi date/start/end)
+4. `save_task`
+5. `rebuild_reminder_job`
+6. `format_reply`
 
-- 4 workflow chạy end-to-end.
-- Có log step-level và run-level.
-- Error response nhất quán.
+### 5.3 delete_task
 
-## 11. Output cần nộp
+1. `resolve_task_target`
+2. `cancel_reminder_jobs`
+3. `delete_task`
+4. `format_reply`
 
-- Sequence diagram 2 workflow.
-- Log mẫu success/fail.
-- Danh sách API contract đã chốt.
+### 5.4 query_data v1
+
+1. `resolve_query_type`
+2. `run_query` (SQL template)
+3. `format_reply`
+
+Query type da support:
+
+- `today_unfinished_count`
+- `week_total_hours`
+- `high_priority_open`
+- `today_task_list`
+- `today_summary`
+
+## 6. Migration schema
+
+File: `db/migrations/003_agent_runs_workflow_columns.sql`
+
+Bo sung cot:
+
+- `run_type TEXT NOT NULL DEFAULT 'route'`
+- `error_message TEXT NULL`
+- `duration_ms INT NULL`
+- `step_logs JSONB NULL`
+
+## 7. Test checklist
+
+1. Tao task thanh cong.
+2. Tao task trung gio -> fail overlap.
+3. Update task thanh cong.
+4. Delete task thanh cong.
+5. Query data thanh cong.
+
+Bo scenario mau:
+
+- `tests/workflow/workflow.test.json`
+
+## 8. Tich hop voi Phase 2
+
+Phase 2 (`/api/agent/route`) van giu rieng de test router.
+Phase 3 (`/api/agent/workflow/execute`) se:
+
+1. route (neu can),
+2. neu `need_clarification=true` thi dung tai routing,
+3. neu du data thi execute workflow.

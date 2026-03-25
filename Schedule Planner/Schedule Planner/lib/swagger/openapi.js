@@ -81,6 +81,42 @@ const ROUTER_RESULT_SCHEMA = {
   },
 };
 
+const WORKFLOW_RESULT_SCHEMA = {
+  type: "object",
+  required: ["ok", "intent", "logs", "run_id", "duration_ms"],
+  properties: {
+    ok: { type: "boolean" },
+    intent: {
+      type: "string",
+      enum: ["create_task", "update_task", "delete_task", "query_data"],
+    },
+    result: {
+      type: "object",
+      additionalProperties: true,
+      nullable: true,
+    },
+    logs: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["step", "status", "started_at"],
+        properties: {
+          step: { type: "string" },
+          status: { type: "string", enum: ["running", "success", "failed"] },
+          started_at: { type: "string", format: "date-time" },
+          finished_at: { type: "string", format: "date-time", nullable: true },
+          duration_ms: { type: "integer", nullable: true },
+          meta: { type: "object", additionalProperties: true, nullable: true },
+          error: { type: "object", additionalProperties: true, nullable: true },
+        },
+      },
+    },
+    error: { type: "object", additionalProperties: true, nullable: true },
+    run_id: { type: "string", format: "uuid", nullable: true },
+    duration_ms: { type: "integer" },
+  },
+};
+
 export function getOpenApiDocument() {
   return {
     openapi: "3.1.0",
@@ -245,6 +281,90 @@ export function getOpenApiDocument() {
           },
         },
       },
+      "/api/agent/workflow/execute": {
+        post: {
+          summary: "Execute workflow engine (Phase 3)",
+          operationId: "postAgentWorkflowExecute",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    userId: {
+                      type: "string",
+                      format: "uuid",
+                      nullable: true,
+                      example: "00000000-0000-0000-0000-000000000001",
+                    },
+                    text: {
+                      type: "string",
+                      nullable: true,
+                      example: "Tao task hop sprint ngay mai tu 09:00 den 10:00",
+                    },
+                    provider: {
+                      type: "string",
+                      enum: ["rule", "mistral", "auto"],
+                      nullable: true,
+                    },
+                    context: {
+                      type: "object",
+                      nullable: true,
+                      additionalProperties: true,
+                    },
+                    intent: {
+                      type: "string",
+                      enum: ["create_task", "update_task", "delete_task", "query_data"],
+                      nullable: true,
+                    },
+                    entities: {
+                      type: "object",
+                      nullable: true,
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Workflow executed or needs clarification",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: true,
+                    properties: {
+                      ok: { type: "boolean" },
+                      stage: { type: "string", nullable: true, enum: ["routing", "workflow"] },
+                      route: { $ref: "#/components/schemas/RouterResult" },
+                      execution: { $ref: "#/components/schemas/WorkflowResult" },
+                    },
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Business validation error",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorMessage" },
+                },
+              },
+            },
+            "500": {
+              description: "System error",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorMessage" },
+                },
+              },
+            },
+          },
+        },
+      },
       "/api/openapi": {
         get: {
           summary: "Lấy OpenAPI schema JSON",
@@ -285,6 +405,7 @@ export function getOpenApiDocument() {
       schemas: {
         PlannerState: PLANNER_STATE_SCHEMA,
         RouterResult: ROUTER_RESULT_SCHEMA,
+        WorkflowResult: WORKFLOW_RESULT_SCHEMA,
         ErrorMessage: {
           type: "object",
           required: ["message"],

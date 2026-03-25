@@ -69,7 +69,15 @@ function shouldReturnNextOpenTask(normalizedText) {
   if (
     /\b(task nao|cong viec nao|viec nao)\b/.test(normalizedText) &&
     /\b(can|nen|phai)\b/.test(normalizedText) &&
-    /\b(lam|hoan thanh|xu ly|xong)\b/.test(normalizedText)
+    /\b(lam|hoan thanh|xu ly|xong|thuc hien)\b/.test(normalizedText)
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(can|nen|phai)\b/.test(normalizedText) &&
+    /\b(lam|hoan thanh|xu ly|thuc hien)\b/.test(normalizedText) &&
+    /\b(ngay|bay gio|luc nay)\b/.test(normalizedText)
   ) {
     return true;
   }
@@ -77,10 +85,8 @@ function shouldReturnNextOpenTask(normalizedText) {
   return /\b(lam gi tiep|nen lam gi|nen uu tien viec nao)\b/.test(normalizedText);
 }
 
-function resolveQueryType({ text, entities }) {
+function resolveQueryType({ text }) {
   const normalizedText = normalizeForMatch(text || "");
-  const priority = entities?.priority;
-  const status = entities?.status;
 
   if (
     hasTodaySignal(normalizedText) &&
@@ -94,15 +100,12 @@ function resolveQueryType({ text, entities }) {
     return "week_total_hours";
   }
 
-  if (
-    (/\b(uu tien cao|high priority)\b/.test(normalizedText) && /\b(chua|dang|open)\b/.test(normalizedText)) ||
-    (priority === "high" && (status === "todo" || status === "doing"))
-  ) {
-    return "high_priority_open";
-  }
-
   if (shouldReturnNextOpenTask(normalizedText)) {
     return "next_open_task";
+  }
+
+  if (/\b(uu tien cao|high priority)\b/.test(normalizedText) && /\b(chua|dang|open)\b/.test(normalizedText)) {
+    return "high_priority_open";
   }
 
   if (
@@ -242,38 +245,73 @@ async function runTodayTaskList(db, userId, now) {
 }
 
 function pickNextOpenTask(openTasks, now) {
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const nowMinutes = getCurrentMinutesInPlannerTimezone(now);
 
-  const activeTask = openTasks.find((task) => {
-    const start = toMinutes(task.start);
-    const end = toMinutes(task.end);
-    return start !== null && end !== null && start <= nowMinutes && nowMinutes < end;
-  });
-  if (activeTask) {
-    return { task: activeTask, reason: "đang tới giờ thực hiện" };
-  }
+  const activeTasks = [];
+  const upcomingTasks = [];
+  const overdueTasks = [];
 
-  const upcomingTask = openTasks.find((task) => {
-    const start = toMinutes(task.start);
-    return start !== null && start >= nowMinutes;
-  });
-  if (upcomingTask) {
-    return { task: upcomingTask, reason: "sắp đến giờ gần nhất" };
-  }
-
-  let nearestTask = openTasks[0];
-  let minDiff = Number.POSITIVE_INFINITY;
   for (const task of openTasks) {
     const start = toMinutes(task.start);
-    if (start === null) continue;
-    const diff = Math.abs(start - nowMinutes);
-    if (diff < minDiff) {
-      minDiff = diff;
-      nearestTask = task;
+    const end = toMinutes(task.end);
+    if (start === null || end === null) continue;
+
+    if (start <= nowMinutes && nowMinutes < end) {
+      activeTasks.push(task);
+      continue;
     }
+
+    if (start >= nowMinutes) {
+      upcomingTasks.push(task);
+      continue;
+    }
+
+    overdueTasks.push(task);
   }
 
-  return { task: nearestTask, reason: "là task chưa hoàn thành gần nhất trong hôm nay" };
+  if (activeTasks.length > 0) {
+    return { task: activeTasks[0], reason: "đang tới giờ thực hiện", upcomingTasks, overdueTasks };
+  }
+
+  if (upcomingTasks.length > 0) {
+    return { task: upcomingTasks[0], reason: "sắp đến giờ gần nhất", upcomingTasks, overdueTasks };
+  }
+
+  return { task: null, reason: "", upcomingTasks, overdueTasks };
+}
+
+function getCurrentMinutesInPlannerTimezone(now) {
+  const timezone = process.env.PLANNER_DEFAULT_TIMEZONE || "Asia/Ho_Chi_Minh";
+
+  try {
+    const formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone,
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const parts = formatter.formatToParts(now);
+    const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+    const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+    if (Number.isFinite(hour) && Number.isFinite(minute)) {
+      return hour * 60 + minute;
+    }
+  } catch {}
+
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function toTaskBrief(task) {
+  return `${task.start}-${task.end} | ${task.title}`;
+}
+
+function summarizeOverdueTasks(tasks) {
+  if (!tasks.length) return "";
+  const preview = tasks.slice(0, 3).map(toTaskBrief).join("; ");
+  if (tasks.length > 3) {
+    return `${preview}; ... và ${tasks.length - 3} task quá giờ khác`;
+  }
+  return preview;
 }
 
 async function runNextOpenTask(db, userId, now) {
@@ -307,6 +345,27 @@ async function runNextOpenTask(db, userId, now) {
 
   const picked = pickNextOpenTask(openTasks, now);
   const selectedTask = picked.task;
+
+  if (!selectedTask) {
+    const overdueSummary = summarizeOverdueTasks(picked.overdueTasks);
+    const summary = overdueSummary
+      ? `Từ bây giờ không còn task nào trong hôm nay. Bạn còn ${picked.overdueTasks.length} task chưa hoàn thành nhưng đã quá giờ: ${overdueSummary}.`
+      : "Từ bây giờ không còn task nào trong hôm nay.";
+
+    return {
+      query_type: "next_open_task",
+      summary,
+      data: {
+        date: today,
+        remaining_open_tasks: openTasks.length,
+        selected_task: null,
+        open_tasks: openTasks,
+        upcoming_open_tasks: [],
+        overdue_open_tasks: picked.overdueTasks,
+      },
+    };
+  }
+
   const summary = `${
     openTasks.length === 1
       ? "Bạn chỉ còn 1 task chưa hoàn thành."
@@ -323,6 +382,8 @@ async function runNextOpenTask(db, userId, now) {
       remaining_open_tasks: openTasks.length,
       selected_task: selectedTask,
       open_tasks: openTasks,
+      upcoming_open_tasks: picked.upcomingTasks,
+      overdue_open_tasks: picked.overdueTasks,
     },
   };
 }
@@ -413,4 +474,3 @@ export const queryDataWorkflow = [
     },
   },
 ];
-

@@ -28,8 +28,8 @@ const VIEW_META = {
     panelTitle: "Lịch Làm Việc Theo Tuần",
   },
   month: {
-    title: "Timeline Tháng",
-    subtitle: "Hiển thị theo từng tuần trong tháng để giữ task rõ ràng",
+    title: "Lịch Làm Việc Tháng",
+    subtitle: "Hiển thị dạng bảng tháng đầy đủ để xem task rõ ràng",
     panelTitle: "Lịch Làm Việc Theo Tháng",
   },
 };
@@ -94,59 +94,44 @@ function getDayWeekRangeDates(mode, anchorISODate) {
   ];
 }
 
-function buildMonthSlices(anchorISODate) {
+function buildMonthBoard(anchorISODate) {
   const anchor = parseISODate(anchorISODate) || parseISODate(todayISO()) || new Date();
   const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const monthEnd = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
-  const cursor = startOfWeekMonday(monthStart);
-  const slices = [];
+  const gridStart = new Date(monthStart);
+  gridStart.setDate(monthStart.getDate() - monthStart.getDay());
+  const gridEnd = new Date(monthEnd);
+  gridEnd.setDate(monthEnd.getDate() + (6 - monthEnd.getDay()));
 
-  while (cursor <= monthEnd) {
-    const weekDays = [];
-    for (let index = 0; index < 7; index += 1) {
-      const date = addDays(cursor, index);
-      if (date.getMonth() !== monthStart.getMonth()) {
-        continue;
-      }
-      weekDays.push({
-        date: toISODate(date),
-        label: pad2(date.getDate()),
-        subLabel: WEEKDAY_SHORT[date.getDay()],
-      });
-    }
-
-    if (weekDays.length) {
-      slices.push(weekDays);
-    }
-
-    cursor.setDate(cursor.getDate() + 7);
+  const cells = [];
+  for (let cursor = new Date(gridStart); cursor <= gridEnd; cursor.setDate(cursor.getDate() + 1)) {
+    const day = new Date(cursor);
+    cells.push({
+      date: toISODate(day),
+      dayNumber: day.getDate(),
+      weekday: WEEKDAY_SHORT[day.getDay()],
+      inCurrentMonth: day.getMonth() === monthStart.getMonth(),
+    });
   }
 
-  return {
-    monthLabel: `Tháng ${pad2(monthStart.getMonth() + 1)}/${monthStart.getFullYear()}`,
-    slices,
-  };
+  const monthLabel = monthStart.toLocaleDateString("vi-VN", {
+    month: "long",
+    year: "numeric",
+  });
+
+  return { monthLabel, cells };
 }
 
-function getSliceIndexForDate(slices, targetISODate) {
-  const foundIndex = slices.findIndex((slice) => slice.some((item) => item.date === targetISODate));
-  return foundIndex >= 0 ? foundIndex : 0;
-}
-
-function getRangeLabel(mode, dates, monthMeta, monthSliceIndex) {
+function getRangeLabel(mode, dates, monthBoard) {
+  if (mode === "month") return monthBoard.monthLabel;
   if (!dates.length) return "";
   if (mode === "day") return formatDisplayDate(dates[0].date);
-  if (mode === "week") {
-    return `${formatDisplayDate(dates[0].date)} - ${formatDisplayDate(dates[dates.length - 1].date)}`;
-  }
-
-  return `${monthMeta.monthLabel} · Tuần ${monthSliceIndex + 1}/${monthMeta.slices.length || 1}`;
+  return `${formatDisplayDate(dates[0].date)} - ${formatDisplayDate(dates[dates.length - 1].date)}`;
 }
 
 export default function DailyPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
   const [timelineMode, setTimelineMode] = useState("day");
-  const [monthSliceIndex, setMonthSliceIndex] = useState(0);
   const [alert, setAlert] = useState("");
   const [editingId, setEditingId] = useState("");
   const [drag, setDrag] = useState(null);
@@ -164,15 +149,31 @@ export default function DailyPage() {
     () => new Map(state.goals.map((goal) => [goal.id, goal.title])),
     [state.goals]
   );
-  const monthMeta = useMemo(() => buildMonthSlices(form.date), [form.date]);
-  const maxMonthSliceIndex = Math.max(0, monthMeta.slices.length - 1);
-  const safeMonthSliceIndex = Math.max(0, Math.min(maxMonthSliceIndex, monthSliceIndex));
-  const rangeDates = useMemo(() => {
-    if (timelineMode === "month") {
-      return monthMeta.slices[safeMonthSliceIndex] || [];
+  const monthBoard = useMemo(() => buildMonthBoard(form.date), [form.date]);
+  const monthTasksByDate = useMemo(() => {
+    const map = new Map();
+    for (const cell of monthBoard.cells) {
+      map.set(cell.date, []);
     }
+
+    for (const task of state.tasks) {
+      const bucket = map.get(task.date);
+      if (bucket) {
+        bucket.push(task);
+      }
+    }
+
+    for (const tasks of map.values()) {
+      tasks.sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
+    }
+
+    return map;
+  }, [state.tasks, monthBoard.cells]);
+
+  const rangeDates = useMemo(() => {
+    if (timelineMode === "month") return [];
     return getDayWeekRangeDates(timelineMode, form.date);
-  }, [timelineMode, form.date, monthMeta.slices, safeMonthSliceIndex]);
+  }, [timelineMode, form.date]);
   const rangeDateSet = useMemo(() => new Set(rangeDates.map((item) => item.date)), [rangeDates]);
   const columnIndexByDate = useMemo(
     () => new Map(rangeDates.map((item, index) => [item.date, index])),
@@ -186,21 +187,25 @@ export default function DailyPage() {
     [state.tasks, rangeDateSet]
   );
 
-  const isRangeMode = timelineMode !== "day";
-  const columnWidth = timelineMode === "day" ? 120 : 230;
+  const isTimelineMode = timelineMode !== "month";
+  const isRangeMode = timelineMode === "week";
+  const columnWidth = timelineMode === "week" ? 230 : 120;
   const timelineWidth = TIMELINE_GUTTER + rangeDates.length * columnWidth + TIMELINE_RIGHT_PADDING;
-  const rangeLabel = getRangeLabel(timelineMode, rangeDates, monthMeta, safeMonthSliceIndex);
+  const rangeLabel = getRangeLabel(timelineMode, rangeDates, monthBoard);
   const viewMeta = VIEW_META[timelineMode] || VIEW_META.day;
 
   if (!loaded) return null;
 
   function handleDateChange(nextDate) {
     setForm((prev) => ({ ...prev, date: nextDate }));
-    if (timelineMode === "month") {
-      const nextMonthMeta = buildMonthSlices(nextDate);
-      const nextIndex = getSliceIndexForDate(nextMonthMeta.slices, nextDate);
-      setMonthSliceIndex(nextIndex);
-    }
+  }
+
+  function shiftMonth(delta) {
+    const current = parseISODate(form.date) || new Date();
+    const target = new Date(current.getFullYear(), current.getMonth() + delta, 1);
+    const maxDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+    target.setDate(Math.min(current.getDate(), maxDay));
+    handleDateChange(toISODate(target));
   }
 
   function submitTask(event) {
@@ -247,11 +252,6 @@ export default function DailyPage() {
       priority: task.priority,
       goalId: task.goalId || "",
     });
-
-    if (timelineMode === "month") {
-      const nextIndex = getSliceIndexForDate(monthMeta.slices, task.date);
-      setMonthSliceIndex(nextIndex);
-    }
   }
 
   function resetEdit() {
@@ -320,32 +320,25 @@ export default function DailyPage() {
                   key={option.value}
                   type="button"
                   className={`timeline-view-btn${timelineMode === option.value ? " active" : ""}`}
-                  onClick={() => {
-                    setTimelineMode(option.value);
-                    if (option.value === "month") {
-                      const nextIndex = getSliceIndexForDate(monthMeta.slices, form.date);
-                      setMonthSliceIndex(nextIndex);
-                    }
-                  }}
+                  onClick={() => setTimelineMode(option.value)}
                 >
                   {option.label}
                 </button>
               ))}
             </div>
-            {timelineMode === "month" && monthMeta.slices.length > 1 ? (
-              <select
-                className="timeline-slice-select"
-                value={String(safeMonthSliceIndex)}
-                onChange={(event) => setMonthSliceIndex(Number(event.target.value))}
-                title="Chọn tuần trong tháng"
-              >
-                {monthMeta.slices.map((slice, index) => (
-                  <option key={slice[0]?.date || index} value={String(index)}>
-                    Tuần {index + 1}: {formatDisplayDate(slice[0].date)} -{" "}
-                    {formatDisplayDate(slice[slice.length - 1].date)}
-                  </option>
-                ))}
-              </select>
+            {timelineMode === "month" ? (
+              <div className="month-nav">
+                <button type="button" className="month-nav-btn" onClick={() => handleDateChange(todayISO())}>
+                  Hôm nay
+                </button>
+                <button type="button" className="month-nav-btn" onClick={() => shiftMonth(-1)} aria-label="Tháng trước">
+                  ‹
+                </button>
+                <strong className="month-nav-label">{monthBoard.monthLabel}</strong>
+                <button type="button" className="month-nav-btn" onClick={() => shiftMonth(1)} aria-label="Tháng sau">
+                  ›
+                </button>
+              </div>
             ) : null}
           </div>
         </div>
@@ -388,79 +381,171 @@ export default function DailyPage() {
           Đang xem: {rangeLabel}. Double-click vào task để mở sửa nhanh.
         </p>
 
-        <div className="timeline-wrap" onPointerMove={onDragMove} onPointerUp={() => setDrag(null)}>
-          <div className="timeline-scroll-inner" style={isRangeMode ? { minWidth: `${timelineWidth}px` } : undefined}>
-            {isRangeMode ? (
-              <div
-                className="timeline-columns-header"
-                style={{ gridTemplateColumns: `${TIMELINE_GUTTER}px repeat(${rangeDates.length}, ${columnWidth}px)` }}
-              >
-                <div className="timeline-columns-spacer" />
-                {rangeDates.map((item) => (
-                  <div
-                    key={item.date}
-                    className={`timeline-column-head${item.date === state.today ? " today" : ""}`}
-                    title={formatDisplayDate(item.date)}
-                  >
-                    <strong>{item.label}</strong>
-                    <span>{item.subLabel}</span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            <div
-              className={`timeline${isRangeMode ? " timeline-range" : ""}`}
-              style={{
-                "--timeline-column-width": `${columnWidth}px`,
-                "--timeline-grid-start": `${TIMELINE_GUTTER}px`,
-                ...(isRangeMode ? { minWidth: `${timelineWidth}px`, width: `${timelineWidth}px` } : {}),
-              }}
-            >
-              {Array.from({ length: 24 }).map((_, hour) => (
-                <div key={hour} className="hour-label" style={{ top: `${hour * HOUR_HEIGHT + 2}px` }}>
-                  {String(hour).padStart(2, "0")}:00
+        {timelineMode === "month" ? (
+          <div className="month-table-wrap">
+            <div className="month-table-header">
+              {WEEKDAY_SHORT.map((weekday) => (
+                <div key={weekday} className="month-weekday">
+                  {weekday}
                 </div>
               ))}
-
-              {visibleTasks.map((task) => {
-                const start = toMinutes(task.start);
-                const end = toMinutes(task.end);
-                const height = ((end - start) / 60) * HOUR_HEIGHT;
-                const top = (start / 60) * HOUR_HEIGHT;
-                const isTiny = height < 72;
-                const isCompact = height < 108;
-                const goalTitle = task.goalId ? goalTitleById.get(task.goalId) : "";
+            </div>
+            <div className="month-table-grid">
+              {monthBoard.cells.map((cell) => {
+                const tasks = monthTasksByDate.get(cell.date) || [];
+                const isToday = cell.date === state.today;
 
                 return (
                   <article
-                    key={task.id}
-                    className={`task-card priority-${task.priority}${isCompact ? " compact" : ""}${isTiny ? " tiny" : ""}`}
-                    style={getTaskStyle(task, top, height)}
-                    onPointerDown={(event) => onDragStart(event, task)}
-                    onDoubleClick={() => onEdit(task)}
+                    key={cell.date}
+                    className={`month-cell${cell.inCurrentMonth ? "" : " outside"}${isToday ? " today" : ""}`}
                   >
-                    {isTiny ? (
-                      <div className="task-tiny-row">
-                        <strong title={`${task.title} (${task.start} - ${task.end})`}>
-                          {task.title} · {task.start} - {task.end}
-                        </strong>
-                        <div className="task-meta-row task-meta-row-tiny">
-                          <span className={`badge task-priority-badge priority-${task.priority}`}>
-                            {priorityLabel(task.priority)}
-                          </span>
-                          <span className="badge task-status-badge">{statusLabel(task.status)}</span>
-                          {goalTitle ? (
-                            <span className="badge task-goal-badge" title={goalTitle}>
-                              Mục tiêu: {goalTitle}
+                    <div className="month-cell-top">
+                      <strong>{pad2(cell.dayNumber)}</strong>
+                      <span>{tasks.length ? `${tasks.length} task` : ""}</span>
+                    </div>
+                    <div className="month-cell-list">
+                      {tasks.map((task) => (
+                        <button
+                          key={task.id}
+                          type="button"
+                          className={`month-task-chip priority-${task.priority}${task.status === "done" ? " done" : ""}`}
+                          onClick={() => onEdit(task)}
+                          title={`${task.start}-${task.end} | ${task.title} (${statusLabel(task.status)}, ưu tiên ${priorityLabel(task.priority)})`}
+                        >
+                          <span className="month-task-time">{task.start}</span>
+                          <span className="month-task-title">{task.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="timeline-wrap" onPointerMove={onDragMove} onPointerUp={() => setDrag(null)}>
+            <div className="timeline-scroll-inner" style={isRangeMode ? { minWidth: `${timelineWidth}px` } : undefined}>
+              {isRangeMode ? (
+                <div
+                  className="timeline-columns-header"
+                  style={{ gridTemplateColumns: `${TIMELINE_GUTTER}px repeat(${rangeDates.length}, ${columnWidth}px)` }}
+                >
+                  <div className="timeline-columns-spacer" />
+                  {rangeDates.map((item) => (
+                    <div
+                      key={item.date}
+                      className={`timeline-column-head${item.date === state.today ? " today" : ""}`}
+                      title={formatDisplayDate(item.date)}
+                    >
+                      <strong>{item.label}</strong>
+                      <span>{item.subLabel}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              <div
+                className={`timeline${isRangeMode ? " timeline-range" : ""}`}
+                style={{
+                  "--timeline-column-width": `${columnWidth}px`,
+                  "--timeline-grid-start": `${TIMELINE_GUTTER}px`,
+                  ...(isRangeMode ? { minWidth: `${timelineWidth}px`, width: `${timelineWidth}px` } : {}),
+                }}
+              >
+                {Array.from({ length: 24 }).map((_, hour) => (
+                  <div key={hour} className="hour-label" style={{ top: `${hour * HOUR_HEIGHT + 2}px` }}>
+                    {String(hour).padStart(2, "0")}:00
+                  </div>
+                ))}
+
+                {visibleTasks.map((task) => {
+                  const start = toMinutes(task.start);
+                  const end = toMinutes(task.end);
+                  const height = ((end - start) / 60) * HOUR_HEIGHT;
+                  const top = (start / 60) * HOUR_HEIGHT;
+                  const isTiny = height < 72;
+                  const isCompact = height < 108;
+                  const goalTitle = task.goalId ? goalTitleById.get(task.goalId) : "";
+
+                  return (
+                    <article
+                      key={task.id}
+                      className={`task-card priority-${task.priority}${isCompact ? " compact" : ""}${isTiny ? " tiny" : ""}`}
+                      style={getTaskStyle(task, top, height)}
+                      onPointerDown={(event) => onDragStart(event, task)}
+                      onDoubleClick={() => onEdit(task)}
+                    >
+                      {isTiny ? (
+                        <div className="task-tiny-row">
+                          <strong title={`${task.title} (${task.start} - ${task.end})`}>
+                            {task.title} · {task.start} - {task.end}
+                          </strong>
+                          <div className="task-meta-row task-meta-row-tiny">
+                            <span className={`badge task-priority-badge priority-${task.priority}`}>
+                              {priorityLabel(task.priority)}
                             </span>
-                          ) : null}
-                          <label className="task-check tiny" title="Đánh dấu hoàn thành">
+                            <span className="badge task-status-badge">{statusLabel(task.status)}</span>
+                            {goalTitle ? (
+                              <span className="badge task-goal-badge" title={goalTitle}>
+                                Mục tiêu: {goalTitle}
+                              </span>
+                            ) : null}
+                            <label className="task-check tiny" title="Đánh dấu hoàn thành">
+                              <input
+                                type="checkbox"
+                                checked={task.status === "done"}
+                                onChange={(event) => actions.toggleTaskDone(task.id, event.target.checked)}
+                              />
+                            </label>
+                            <div className="task-action-buttons">
+                              <button className="task-action-btn" type="button" onClick={() => onEdit(task)}>
+                                Sửa
+                              </button>
+                              <button
+                                className="task-action-btn danger"
+                                type="button"
+                                onClick={() => actions.deleteTask(task.id)}
+                              >
+                                Xóa
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <header className="task-head">
+                            <strong title={task.title}>{task.title}</strong>
+                            <span className={`badge task-priority-badge priority-${task.priority}`}>
+                              {priorityLabel(task.priority)}
+                            </span>
+                          </header>
+
+                          <div className="task-meta-row">
+                            <span className="task-time">
+                              {task.start} - {task.end}
+                            </span>
+                            <div className="task-meta-right">
+                              <span className="badge task-status-badge">{statusLabel(task.status)}</span>
+                              {goalTitle ? (
+                                <span className="badge task-goal-badge" title={goalTitle}>
+                                  Mục tiêu: {goalTitle}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {!isTiny ? (
+                        <div className="task-actions">
+                          <label className="task-check">
                             <input
                               type="checkbox"
                               checked={task.status === "done"}
                               onChange={(event) => actions.toggleTaskDone(task.id, event.target.checked)}
                             />
+                            {isCompact ? null : <span>Hoàn thành</span>}
                           </label>
                           <div className="task-action-buttons">
                             <button className="task-action-btn" type="button" onClick={() => onEdit(task)}>
@@ -475,62 +560,14 @@ export default function DailyPage() {
                             </button>
                           </div>
                         </div>
-                      </div>
-                    ) : (
-                      <>
-                        <header className="task-head">
-                          <strong title={task.title}>{task.title}</strong>
-                          <span className={`badge task-priority-badge priority-${task.priority}`}>
-                            {priorityLabel(task.priority)}
-                          </span>
-                        </header>
-
-                        <div className="task-meta-row">
-                          <span className="task-time">
-                            {task.start} - {task.end}
-                          </span>
-                          <div className="task-meta-right">
-                            <span className="badge task-status-badge">{statusLabel(task.status)}</span>
-                            {goalTitle ? (
-                              <span className="badge task-goal-badge" title={goalTitle}>
-                                Mục tiêu: {goalTitle}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {!isTiny ? (
-                      <div className="task-actions">
-                        <label className="task-check">
-                          <input
-                            type="checkbox"
-                            checked={task.status === "done"}
-                            onChange={(event) => actions.toggleTaskDone(task.id, event.target.checked)}
-                          />
-                          {isCompact ? null : <span>Hoàn thành</span>}
-                        </label>
-                        <div className="task-action-buttons">
-                          <button className="task-action-btn" type="button" onClick={() => onEdit(task)}>
-                            Sửa
-                          </button>
-                          <button
-                            className="task-action-btn danger"
-                            type="button"
-                            onClick={() => actions.deleteTask(task.id)}
-                          >
-                            Xóa
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })}
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </section>
     </AppShell>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { usePlannerData } from "@/hooks/usePlannerData";
 import { priorityLabel, statusLabel, toMinutes, todayISO } from "@/lib/plannerStore";
@@ -9,6 +9,7 @@ const HOUR_HEIGHT = 36;
 const TIMELINE_GUTTER = 74;
 const TIMELINE_RIGHT_PADDING = 22;
 const WEEKDAY_SHORT = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+const CHEER_MESSAGES = ["Tuyệt vời!", "Xuất sắc!", "Hoàn thành!", "Rất tốt!", "Tuyệt cú mèo!"];
 
 const VIEW_OPTIONS = [
   { value: "day", label: "Ngày" },
@@ -135,6 +136,9 @@ export default function DailyPage() {
   const [alert, setAlert] = useState("");
   const [editingId, setEditingId] = useState("");
   const [drag, setDrag] = useState(null);
+  const [justCompletedTaskId, setJustCompletedTaskId] = useState("");
+  const [justCompletedCheer, setJustCompletedCheer] = useState(CHEER_MESSAGES[0]);
+  const completionEffectTimeoutRef = useRef(null);
   const [form, setForm] = useState({
     date: todayISO(),
     title: "",
@@ -193,6 +197,36 @@ export default function DailyPage() {
   const timelineWidth = TIMELINE_GUTTER + rangeDates.length * columnWidth + TIMELINE_RIGHT_PADDING;
   const rangeLabel = getRangeLabel(timelineMode, rangeDates, monthBoard);
   const viewMeta = VIEW_META[timelineMode] || VIEW_META.day;
+  const monthCurrentDateSet = useMemo(
+    () => new Set(monthBoard.cells.filter((cell) => cell.inCurrentMonth).map((cell) => cell.date)),
+    [monthBoard.cells]
+  );
+  const timelineProgress = useMemo(() => {
+    const scopedTasks = state.tasks.filter((task) =>
+      timelineMode === "month" ? monthCurrentDateSet.has(task.date) : rangeDateSet.has(task.date)
+    );
+    const total = scopedTasks.length;
+    const done = scopedTasks.filter((task) => task.status === "done").length;
+    const remaining = Math.max(0, total - done);
+    const percent = total ? Math.round((done / total) * 100) : 0;
+    const scopeLabel =
+      timelineMode === "month"
+        ? "trong tháng này"
+        : timelineMode === "week"
+          ? "trong tuần này"
+          : "trong ngày này";
+
+    return { total, done, remaining, percent, scopeLabel };
+  }, [state.tasks, timelineMode, monthCurrentDateSet, rangeDateSet]);
+
+  useEffect(
+    () => () => {
+      if (completionEffectTimeoutRef.current) {
+        clearTimeout(completionEffectTimeoutRef.current);
+      }
+    },
+    []
+  );
 
   if (!loaded) return null;
 
@@ -260,6 +294,30 @@ export default function DailyPage() {
     setForm({ ...form, title: "", start: "08:00", end: "09:00", status: "todo", priority: "medium", goalId: "" });
   }
 
+  function onToggleTaskDone(taskId, checked) {
+    actions.toggleTaskDone(taskId, checked);
+
+    if (!checked) {
+      if (justCompletedTaskId === taskId) {
+        setJustCompletedTaskId("");
+        setJustCompletedCheer(CHEER_MESSAGES[0]);
+      }
+      return;
+    }
+
+    const randomCheer = CHEER_MESSAGES[Math.floor(Math.random() * CHEER_MESSAGES.length)];
+    setJustCompletedCheer(randomCheer);
+    setJustCompletedTaskId(taskId);
+    if (completionEffectTimeoutRef.current) {
+      clearTimeout(completionEffectTimeoutRef.current);
+    }
+    completionEffectTimeoutRef.current = setTimeout(() => {
+      setJustCompletedTaskId("");
+      setJustCompletedCheer(CHEER_MESSAGES[0]);
+      completionEffectTimeoutRef.current = null;
+    }, 1400);
+  }
+
   function onDragStart(event, task) {
     const target = event.target;
     if (target instanceof HTMLElement && target.closest("button, input, label")) {
@@ -308,6 +366,28 @@ export default function DailyPage() {
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
+            <div className="timeline-progress-card timeline-progress-card-head" aria-live="polite">
+              <div
+                className="timeline-progress-donut"
+                style={{ "--timeline-donut-progress": `${timelineProgress.percent * 3.6}deg` }}
+              >
+                <div className="timeline-progress-donut-inner">
+                  <strong>{timelineProgress.percent}%</strong>
+                  <span>Xong</span>
+                </div>
+              </div>
+              <div className="timeline-progress-meta">
+                <strong>
+                  {timelineProgress.done}/{timelineProgress.total} task
+                </strong>
+                <span>
+                  {timelineProgress.total === 0
+                    ? `ChÆ°a cÃ³ task ${timelineProgress.scopeLabel}.`
+                    : `CÃ²n ${timelineProgress.remaining} task ${timelineProgress.scopeLabel}.`}
+                </span>
+              </div>
+            </div>
+
         <div className="panel-head">
           <div>
             <h3>{viewMeta.panelTitle}</h3>
@@ -377,9 +457,11 @@ export default function DailyPage() {
           </button>
         ) : null}
         {alert ? <p className="alert">{alert}</p> : null}
-        <p className="muted" style={{ marginTop: 8 }}>
-          Đang xem: {rangeLabel}. Double-click vào task để mở sửa nhanh.
-        </p>
+        <div className="timeline-summary">
+          <p className="muted" style={{ marginTop: 8 }}>
+            Đang xem: {rangeLabel}. Double-click vào task để mở sửa nhanh.
+          </p>
+        </div>
 
         {timelineMode === "month" ? (
           <div className="month-table-wrap">
@@ -409,7 +491,8 @@ export default function DailyPage() {
                         <button
                           key={task.id}
                           type="button"
-                          className={`month-task-chip priority-${task.priority}${task.status === "done" ? " done" : ""}`}
+                          className={`month-task-chip priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}`}
+                          data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
                           onClick={() => onEdit(task)}
                           title={`${task.start}-${task.end} | ${task.title} (${statusLabel(task.status)}, ưu tiên ${priorityLabel(task.priority)})`}
                         >
@@ -471,7 +554,8 @@ export default function DailyPage() {
                   return (
                     <article
                       key={task.id}
-                      className={`task-card priority-${task.priority}${isCompact ? " compact" : ""}${isTiny ? " tiny" : ""}`}
+                      className={`task-card priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}${isCompact ? " compact" : ""}${isTiny ? " tiny" : ""}`}
+                      data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
                       style={getTaskStyle(task, top, height)}
                       onPointerDown={(event) => onDragStart(event, task)}
                       onDoubleClick={() => onEdit(task)}
@@ -495,7 +579,7 @@ export default function DailyPage() {
                               <input
                                 type="checkbox"
                                 checked={task.status === "done"}
-                                onChange={(event) => actions.toggleTaskDone(task.id, event.target.checked)}
+                                onChange={(event) => onToggleTaskDone(task.id, event.target.checked)}
                               />
                             </label>
                             <div className="task-action-buttons">
@@ -543,7 +627,7 @@ export default function DailyPage() {
                             <input
                               type="checkbox"
                               checked={task.status === "done"}
-                              onChange={(event) => actions.toggleTaskDone(task.id, event.target.checked)}
+                              onChange={(event) => onToggleTaskDone(task.id, event.target.checked)}
                             />
                             {isCompact ? null : <span>Hoàn thành</span>}
                           </label>

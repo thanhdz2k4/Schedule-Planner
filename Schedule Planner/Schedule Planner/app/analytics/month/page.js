@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import AppShell from "@/components/AppShell";
 import { LineChart } from "@/components/SimpleCharts";
@@ -47,11 +47,11 @@ export default function AnalyticsMonthPage() {
 
   return (
     <AppShell
-      title="Analytics · Month"
+      title="Thống Kê Tháng"
       subtitle="Xu hướng năng suất theo ngày"
       quote="Small daily wins compound monthly."
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Light mode" : "Dark mode"}
+      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
@@ -59,7 +59,7 @@ export default function AnalyticsMonthPage() {
           items={[
             { label: "Tổng task", value: stats.total },
             { label: "Task hoàn thành", value: stats.done },
-            { label: "Completion rate", value: `${stats.rate}%` },
+            { label: "Tỷ lệ hoàn thành", value: `${stats.rate}%` },
             { label: "Ngày hiệu quả nhất", value: bestEntry ? formatDate(bestEntry[0]) : "--" },
           ]}
         />
@@ -68,3 +68,4 @@ export default function AnalyticsMonthPage() {
     </AppShell>
   );
 }
+

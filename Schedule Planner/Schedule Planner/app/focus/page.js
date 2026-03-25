@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
@@ -32,16 +32,16 @@ export default function FocusPage() {
 
   return (
     <AppShell
-      title="Focus Mode"
-      subtitle="Pomodoro timer để duy trì kỷ luật"
+      title="Chế Độ Tập Trung"
+      subtitle="Pomodoro 25 phút để giữ nhịp làm việc"
       quote="One focused block at a time."
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Light mode" : "Dark mode"}
+      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
-          <h3>Pomodoro</h3>
+          <h3>Pomodoro Timer</h3>
           <p className="muted">Chu kỳ 25 phút</p>
         </div>
 
@@ -50,11 +50,23 @@ export default function FocusPage() {
             <h2>{minutes}:{seconds}</h2>
           </div>
           <div>
-            <button className="btn" onClick={() => setRunning((prev) => !prev)}>{running ? "Pause" : "Start"}</button>
-            <button className="btn ghost" onClick={() => { setRunning(false); setSecondsLeft(25 * 60); }}>Reset</button>
+            <button className="btn" type="button" onClick={() => setRunning((prev) => !prev)}>
+              {running ? "Tạm dừng" : "Bắt đầu"}
+            </button>
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() => {
+                setRunning(false);
+                setSecondsLeft(25 * 60);
+              }}
+            >
+              Đặt lại
+            </button>
           </div>
         </div>
       </section>
     </AppShell>
   );
 }
+

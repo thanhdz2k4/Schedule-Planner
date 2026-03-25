@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { usePlannerData } from "@/hooks/usePlannerData";
 import { priorityLabel, statusLabel, toMinutes, todayISO } from "@/lib/plannerStore";
 
-const HOUR_HEIGHT = 40;
+const HOUR_HEIGHT = 36;
 
 export default function DailyPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
@@ -77,6 +77,10 @@ export default function DailyPage() {
   }
 
   function onDragStart(event, task) {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest("button, input, label")) {
+      return;
+    }
     setDrag({ taskId: task.id, startY: event.clientY });
   }
 
@@ -97,17 +101,17 @@ export default function DailyPage() {
 
   return (
     <AppShell
-      title="Daily Timeline"
-      subtitle="Không cho phép task overlap"
+      title="Timeline Ngày"
+      subtitle="Sắp lịch theo giờ, không cho phép trùng task"
       goalProgress={state.goalOverall}
       quote="Plan the day before it starts."
-      themeLabel={darkMode ? "Light mode" : "Dark mode"}
+      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
-          <h3>Daily Planner</h3>
-          <p className="muted">Add · Edit · Delete · Drag & Drop</p>
+          <h3>Lịch Làm Việc Theo Ngày</h3>
+          <p className="muted">Thêm · Sửa · Xóa · Kéo thả đổi thời gian</p>
         </div>
 
         <form className="grid-form" onSubmit={submitTask}>
@@ -126,7 +130,7 @@ export default function DailyPage() {
             <option value="low">Thấp</option>
           </select>
           <select value={form.goalId} onChange={(event) => setForm({ ...form, goalId: event.target.value })}>
-            <option value="">Không link goal</option>
+            <option value="">Không gắn mục tiêu</option>
             {state.goals.map((goal) => (
               <option value={goal.id} key={goal.id}>{goal.title}</option>
             ))}
@@ -134,8 +138,11 @@ export default function DailyPage() {
           <button className="btn" type="submit">{editingId ? "Cập nhật task" : "Thêm task"}</button>
         </form>
 
-        {editingId ? <button className="btn-link" onClick={resetEdit}>Hủy sửa</button> : null}
+        {editingId ? <button className="btn-link" type="button" onClick={resetEdit}>Hủy sửa</button> : null}
         {alert ? <p className="alert">{alert}</p> : null}
+        <p className="muted" style={{ marginTop: 8 }}>
+          Task quá ngắn sẽ hiển thị tối giản để không vỡ layout. Double-click vào task để mở sửa nhanh.
+        </p>
 
         <div className="timeline-wrap" onPointerMove={onDragMove} onPointerUp={() => setDrag(null)}>
           <div className="timeline">
@@ -150,32 +157,70 @@ export default function DailyPage() {
               const end = toMinutes(task.end);
               const height = ((end - start) / 60) * HOUR_HEIGHT;
               const top = (start / 60) * HOUR_HEIGHT;
+              const isTiny = height < 72;
+              const isCompact = height < 108;
+              const showStatus = !isCompact;
 
               return (
                 <article
                   key={task.id}
-                  className="task-card"
+                  className={`task-card priority-${task.priority}${isCompact ? " compact" : ""}${isTiny ? " tiny" : ""}`}
                   style={{ top, height }}
                   onPointerDown={(event) => onDragStart(event, task)}
+                  onDoubleClick={() => onEdit(task)}
                 >
-                  <header>
-                    <strong>{task.title}</strong>
-                    <span className="badge">{priorityLabel(task.priority)}</span>
+                  <header className="task-head">
+                    <strong title={task.title}>{task.title}</strong>
+                    {isTiny ? null : (
+                      <span className={`badge task-priority-badge priority-${task.priority}`}>
+                        {priorityLabel(task.priority)}
+                      </span>
+                    )}
                   </header>
-                  <p>{task.start} - {task.end}</p>
-                  <p>{statusLabel(task.status)}</p>
-                  <div className="task-actions">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={task.status === "done"}
-                        onChange={(event) => actions.toggleTaskDone(task.id, event.target.checked)}
-                      />
-                      Done
-                    </label>
-                    <button className="btn-link" onClick={() => onEdit(task)}>Sửa</button>
-                    <button className="btn-link" onClick={() => actions.deleteTask(task.id)}>Xóa</button>
+
+                  <div className={`task-meta-row${isTiny ? " task-meta-row-tiny" : ""}`}>
+                    <span className="task-time">{task.start} - {task.end}</span>
+                    {showStatus ? <span className="badge task-status-badge">{statusLabel(task.status)}</span> : null}
+                    {isTiny ? (
+                      <div className="task-action-buttons">
+                        <button className="task-action-btn" type="button" onClick={() => onEdit(task)}>
+                          Sửa
+                        </button>
+                        <button
+                          className="task-action-btn danger"
+                          type="button"
+                          onClick={() => actions.deleteTask(task.id)}
+                        >
+                          Xóa
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
+
+                  {!isTiny ? (
+                    <div className="task-actions">
+                      <label className="task-check">
+                        <input
+                          type="checkbox"
+                          checked={task.status === "done"}
+                          onChange={(event) => actions.toggleTaskDone(task.id, event.target.checked)}
+                        />
+                        {isCompact ? null : <span>Hoàn thành</span>}
+                      </label>
+                      <div className="task-action-buttons">
+                        <button className="task-action-btn" type="button" onClick={() => onEdit(task)}>
+                          Sửa
+                        </button>
+                        <button
+                          className="task-action-btn danger"
+                          type="button"
+                          onClick={() => actions.deleteTask(task.id)}
+                        >
+                          Xóa
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
@@ -185,3 +230,4 @@ export default function DailyPage() {
     </AppShell>
   );
 }
+

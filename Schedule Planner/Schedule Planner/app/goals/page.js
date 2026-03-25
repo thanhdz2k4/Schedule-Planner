@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
@@ -30,17 +30,17 @@ export default function GoalsPage() {
 
   return (
     <AppShell
-      title="Weekly Goals"
-      subtitle="Track progress theo tuần"
+      title="Mục Tiêu Tuần"
+      subtitle="Theo dõi tiến độ và mức độ hoàn thành"
       quote="Goals turn plans into measurable outcomes."
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Light mode" : "Dark mode"}
+      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
-          <h3>Tạo goal mới</h3>
-          <p className="muted">Task hoàn thành sẽ tự cộng vào goal đã link</p>
+          <h3>Tạo Mục Tiêu Mới</h3>
+          <p className="muted">Task hoàn thành sẽ tự cộng vào mục tiêu đã liên kết</p>
         </div>
 
         <form className="grid-form" onSubmit={submitGoal}>
@@ -65,7 +65,7 @@ export default function GoalsPage() {
             onChange={(event) => setForm({ ...form, deadline: event.target.value })}
             required
           />
-          <button className="btn" type="submit">Thêm goal</button>
+          <button className="btn" type="submit">Thêm mục tiêu</button>
         </form>
 
         <div className="goal-list">
@@ -77,18 +77,21 @@ export default function GoalsPage() {
                   <span>{goal.completed}/{goal.target}</span>
                 </div>
                 <div className="progress"><span style={{ width: `${goal.progress}%` }} /></div>
-                <p className="muted">Deadline: {formatDate(goal.deadline)} · Tiến độ: {goal.progress}%</p>
+                <p className="muted">Hạn chót: {formatDate(goal.deadline)} · Tiến độ: {goal.progress}%</p>
                 {daysRemaining(goal.deadline) <= 2 && goal.progress < 100 ? (
-                  <p className="reminder">Nhắc nhở: gần hết tuần nhưng goal chưa đạt.</p>
+                  <p className="reminder">Nhắc nhở: gần hết tuần nhưng mục tiêu chưa đạt.</p>
                 ) : null}
-                <button className="btn-link" onClick={() => actions.deleteGoal(goal.id)}>Xóa goal</button>
+                <button className="btn-link" type="button" onClick={() => actions.deleteGoal(goal.id)}>
+                  Xóa mục tiêu
+                </button>
               </article>
             ))
           ) : (
-            <div className="mini-card">Chưa có goal nào.</div>
+            <div className="mini-card">Chưa có mục tiêu nào.</div>
           )}
         </div>
       </section>
     </AppShell>
   );
 }
+

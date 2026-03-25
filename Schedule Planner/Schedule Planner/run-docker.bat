@@ -1,10 +1,7 @@
 @echo off
 setlocal
 
-set IMAGE=schedule-planner
-set PORT=3000
+if "%APP_PORT%"=="" set APP_PORT=3000
+if "%DB_PORT%"=="" set DB_PORT=5432
 
-docker build -t %IMAGE% .
-if errorlevel 1 exit /b 1
-
-docker run --rm -p %PORT%:3000 %IMAGE%
+docker compose up --build

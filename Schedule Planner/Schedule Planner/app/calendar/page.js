@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import AppShell from "@/components/AppShell";
 import { usePlannerData } from "@/hooks/usePlannerData";
@@ -22,17 +22,17 @@ export default function CalendarPage() {
 
   return (
     <AppShell
-      title="Calendar View"
-      subtitle="Tháng hiện tại theo dạng lưới"
+      title="Lịch Tháng"
+      subtitle="Tổng quan task theo từng ngày trong tháng"
       quote="Visualize your workload distribution."
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Light mode" : "Dark mode"}
+      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
-          <h3>Lịch tháng</h3>
-          <p className="muted">Mỗi ô hiển thị tổng task trong ngày</p>
+          <h3>Lịch Công Việc</h3>
+          <p className="muted">Mỗi ô hiển thị tổng task và các việc nổi bật trong ngày</p>
         </div>
         <div className="calendar-grid">
           {days.map((day) => {
@@ -42,7 +42,9 @@ export default function CalendarPage() {
                 <strong>{day.slice(-2)}</strong>
                 <p className="muted">{tasks.length} task</p>
                 {tasks.slice(0, 2).map((task) => (
-                  <div className="badge" key={task.id}>{task.start} {task.title}</div>
+                  <div className={`badge task-chip priority-${task.priority}`} key={task.id}>
+                    {task.start} {task.title}
+                  </div>
                 ))}
               </article>
             );
@@ -52,3 +54,4 @@ export default function CalendarPage() {
     </AppShell>
   );
 }
+

@@ -72,3 +72,18 @@ Notion Planner
 theme topic chủ đạo sẽ là E:\Githup Project\Schedule Planner\theme.png
 
 workflow: E:\Githup Project\Schedule Planner\workflow.png
+
+Docker database persistence
+
+- App hiện hỗ trợ lưu dữ liệu vào Postgres qua API `/api/planner`.
+- File `docker-compose.yml` đã có 2 service:
+  - `app`: Next.js app
+  - `db`: PostgreSQL (dữ liệu lưu bằng volume `planner_db_data`)
+- Chạy nhanh:
+  - `run-docker.bat`
+- Nếu cổng 3000 hoặc 5432 đang bận, set trước khi chạy:
+  - `set APP_PORT=38080`
+  - `set DB_PORT=55432`
+  - `run-docker.bat`
+- Dừng service:
+  - `docker compose down`

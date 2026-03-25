@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import AppShell from "@/components/AppShell";
 import { BarChart } from "@/components/SimpleCharts";
@@ -44,11 +44,11 @@ export default function AnalyticsWeekPage() {
 
   return (
     <AppShell
-      title="Analytics · Week"
-      subtitle="Weekly performance"
+      title="Thống Kê Tuần"
+      subtitle="Hiệu suất làm việc trong 7 ngày gần nhất"
       quote="Measure what matters every week."
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Light mode" : "Dark mode"}
+      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
@@ -56,7 +56,7 @@ export default function AnalyticsWeekPage() {
           items={[
             { label: "Tổng task", value: stats.total },
             { label: "Task hoàn thành", value: stats.done },
-            { label: "Completion rate", value: `${stats.rate}%` },
+            { label: "Tỷ lệ hoàn thành", value: `${stats.rate}%` },
             { label: "Tổng giờ", value: `${stats.totalHours}h` },
           ]}
         />
@@ -65,3 +65,4 @@ export default function AnalyticsWeekPage() {
     </AppShell>
   );
 }
+

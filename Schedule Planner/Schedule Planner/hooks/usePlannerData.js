@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   THEME_KEY,
   hasOverlap,
@@ -12,25 +12,102 @@ import {
   todayISO,
 } from "@/lib/plannerStore";
 
+function normalizeStateShape(input) {
+  return {
+    tasks: Array.isArray(input?.tasks) ? input.tasks : [],
+    goals: Array.isArray(input?.goals) ? input.goals : [],
+  };
+}
+
+async function fetchServerState() {
+  const response = await fetch("/api/planner", { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Không thể tải dữ liệu từ database.");
+  }
+
+  const payload = await response.json();
+  return normalizeStateShape(payload);
+}
+
+async function saveServerState(state) {
+  const response = await fetch("/api/planner", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(state),
+  });
+
+  if (!response.ok) {
+    throw new Error("Không thể lưu dữ liệu vào database.");
+  }
+}
+
 export function usePlannerData() {
   const [state, setState] = useState({ tasks: [], goals: [] });
   const [loaded, setLoaded] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const syncErrorShown = useRef(false);
 
   useEffect(() => {
-    const nextState = loadState();
-    setState(nextState);
+    let active = true;
 
-    const theme = localStorage.getItem(THEME_KEY) || "light";
-    const dark = theme === "dark";
-    setDarkMode(dark);
-    document.body.classList.toggle("dark", dark);
-    setLoaded(true);
+    async function bootstrap() {
+      const localState = loadState();
+      let nextState = localState;
+
+      try {
+        const serverState = await fetchServerState();
+        const hasServerData = serverState.tasks.length > 0 || serverState.goals.length > 0;
+
+        if (hasServerData) {
+          nextState = serverState;
+        } else {
+          await saveServerState(localState);
+        }
+      } catch {
+        nextState = localState;
+      }
+
+      if (!active) return;
+      setState(nextState);
+      saveState(nextState);
+
+      const theme = localStorage.getItem(THEME_KEY) || "light";
+      const dark = theme === "dark";
+      setDarkMode(dark);
+      document.body.classList.toggle("dark", dark);
+      setLoaded(true);
+    }
+
+    bootstrap();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
     if (!loaded) return;
+
     saveState(state);
+
+    let active = true;
+    async function persistToServer() {
+      try {
+        await saveServerState(state);
+        if (active) {
+          syncErrorShown.current = false;
+        }
+      } catch (error) {
+        if (active && !syncErrorShown.current) {
+          console.error(error);
+          syncErrorShown.current = true;
+        }
+      }
+    }
+
+    persistToServer();
+    return () => {
+      active = false;
+    };
   }, [state, loaded]);
 
   const actions = useMemo(

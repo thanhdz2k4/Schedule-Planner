@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import AppShell from "@/components/AppShell";
 import { usePlannerData } from "@/hooks/usePlannerData";
-import { daysRemaining, formatDate } from "@/lib/plannerStore";
+import { daysRemaining, formatDate, priorityLabel, statusLabel } from "@/lib/plannerStore";
 
 export default function RemindersPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
@@ -17,25 +17,28 @@ export default function RemindersPage() {
 
   return (
     <AppShell
-      title="Reminders"
-      subtitle="Nhắc việc và goal cần chú ý"
+      title="Nhắc Việc"
+      subtitle="Những task và mục tiêu cần ưu tiên ngay"
       quote="Reminders keep intentions alive."
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Light mode" : "Dark mode"}
+      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel two-col">
         <article>
           <div className="panel-head">
-            <h3>Upcoming Tasks</h3>
+            <h3>Task Sắp Đến Hạn</h3>
           </div>
           <div className="reminder-list">
             {upcomingTasks.length ? (
               upcomingTasks.map((task) => (
-                <div className="mini-card" key={task.id}>
+                <div className={`mini-card task-item priority-${task.priority}`} key={task.id}>
                   <strong>{task.title}</strong>
                   <div>{formatDate(task.date)} · {task.start} - {task.end}</div>
-                  <div className="muted">Trạng thái: {task.status}</div>
+                  <div className="muted">
+                    Trạng thái: {statusLabel(task.status)}
+                    <span className={`badge task-priority-pill priority-${task.priority}`}>{priorityLabel(task.priority)}</span>
+                  </div>
                 </div>
               ))
             ) : (
@@ -46,7 +49,7 @@ export default function RemindersPage() {
 
         <article>
           <div className="panel-head">
-            <h3>Goal Warnings</h3>
+            <h3>Cảnh Báo Mục Tiêu</h3>
           </div>
           <div className="reminder-list">
             {warningGoals.length ? (
@@ -66,3 +69,4 @@ export default function RemindersPage() {
     </AppShell>
   );
 }
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import AppShell from "@/components/AppShell";
 import { BarChart } from "@/components/SimpleCharts";
@@ -37,11 +37,11 @@ export default function AnalyticsYearPage() {
 
   return (
     <AppShell
-      title="Analytics · Year"
+      title="Thống Kê Năm"
       subtitle="So sánh hiệu suất theo tháng"
       quote="Review yearly trends, then adjust weekly."
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Light mode" : "Dark mode"}
+      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
@@ -61,3 +61,4 @@ export default function AnalyticsYearPage() {
     </AppShell>
   );
 }
+

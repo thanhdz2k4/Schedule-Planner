@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import AppShell from "@/components/AppShell";
 import { BarChart, LineChart } from "@/components/SimpleCharts";
@@ -80,23 +80,23 @@ export default function DashboardPage() {
 
   return (
     <AppShell
-      title="Dashboard"
-      subtitle="Tổng quan hiệu suất toàn hệ thống"
+      title="Bảng Điều Khiển"
+      subtitle="Toàn cảnh hiệu suất theo ngày, tuần, tháng"
       quote="Build consistency, not pressure."
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Light mode" : "Dark mode"}
+      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
-          <h3>Analytics Snapshot</h3>
-          <p className="muted">Dashboard hiện toàn bộ đồ thị</p>
+          <h3>Tổng Quan Số Liệu</h3>
+          <p className="muted">Theo dõi nhanh tiến độ và thời lượng làm việc</p>
         </div>
         <StatsGrid
           items={[
             { label: "Tổng task", value: stats.total },
             { label: "Task hoàn thành", value: stats.done },
-            { label: "Completion rate", value: `${stats.rate}%` },
+            { label: "Tỷ lệ hoàn thành", value: `${stats.rate}%` },
             { label: "Tổng giờ", value: `${stats.totalHours}h` },
           ]}
         />
@@ -116,12 +116,12 @@ export default function DashboardPage() {
           <div className="list-cards">
             {todayTasks.length ? (
               todayTasks.map((task) => (
-                <div className="mini-card" key={task.id}>
+                <div className={`mini-card task-item priority-${task.priority}`} key={task.id}>
                   <strong>{task.title}</strong>
                   <div>{task.start} - {task.end}</div>
                   <div className="muted">
                     <span className="badge">{statusLabel(task.status)}</span>
-                    <span className="badge" style={{ marginLeft: 6 }}>{priorityLabel(task.priority)}</span>
+                    <span className={`badge task-priority-pill priority-${task.priority}`}>{priorityLabel(task.priority)}</span>
                   </div>
                 </div>
               ))
@@ -133,7 +133,7 @@ export default function DashboardPage() {
 
         <article>
           <div className="panel-head">
-            <h3>Weekly Goals</h3>
+            <h3>Mục Tiêu Tuần</h3>
           </div>
           <div className="goal-list">
             {state.goals.length ? (
@@ -144,14 +144,14 @@ export default function DashboardPage() {
                     <span>{goal.completed}/{goal.target}</span>
                   </div>
                   <div className="progress"><span style={{ width: `${goal.progress}%` }} /></div>
-                  <p className="muted">Deadline: {formatDate(goal.deadline)} · {goal.progress}%</p>
+                  <p className="muted">Hạn chót: {formatDate(goal.deadline)} · {goal.progress}%</p>
                   {daysRemaining(goal.deadline) <= 2 && goal.progress < 100 ? (
-                    <p className="reminder">Sắp hết tuần nhưng goal chưa đạt.</p>
+                    <p className="reminder">Sắp hết tuần nhưng mục tiêu chưa đạt.</p>
                   ) : null}
                 </div>
               ))
             ) : (
-              <div className="mini-card">Chưa có goal.</div>
+              <div className="mini-card">Chưa có mục tiêu tuần.</div>
             )}
           </div>
         </article>
@@ -159,3 +159,4 @@ export default function DashboardPage() {
     </AppShell>
   );
 }
+

@@ -402,8 +402,8 @@ export default function DailyPage() {
                 </strong>
                 <span>
                   {timelineProgress.total === 0
-                    ? `ChÆ°a cÃ³ task ${timelineProgress.scopeLabel}.`
-                    : `CÃ²n ${timelineProgress.remaining} task ${timelineProgress.scopeLabel}.`}
+                    ? `Chưa có task ${timelineProgress.scopeLabel}.`
+                    : `Còn ${timelineProgress.remaining} task ${timelineProgress.scopeLabel}.`}
                 </span>
               </div>
             </div>

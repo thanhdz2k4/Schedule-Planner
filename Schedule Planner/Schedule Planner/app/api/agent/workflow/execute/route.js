@@ -1,7 +1,9 @@
 import { executeWorkflow } from "@/lib/agent/workflow-engine";
+import { loadUserMemoryContext, persistMemoryTurn } from "@/lib/agent/memory";
 import { normalizeContext, routeUserText } from "@/lib/agent/router";
+import { withTransaction } from "@/lib/db/client";
 import { ensureMigrations } from "@/lib/db/migrate";
-import { resolveUserId } from "@/lib/db/users";
+import { ensureUserExists, resolveUserId } from "@/lib/db/users";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -37,6 +39,51 @@ function normalizePayload(payload) {
         ? payload.entities
         : {},
   };
+}
+
+function mergeContextWithMemory(baseContext, memoryContext) {
+  const context = normalizeContext(baseContext);
+  const contextEntities =
+    context.entities && typeof context.entities === "object" && !Array.isArray(context.entities)
+      ? context.entities
+      : {};
+
+  return normalizeContext({
+    ...context,
+    entities: {
+      ...(memoryContext.entityDefaults || {}),
+      ...contextEntities,
+    },
+    memory_facts: Array.isArray(memoryContext.routerMemoryFacts)
+      ? memoryContext.routerMemoryFacts
+      : [],
+  });
+}
+
+async function resolveMemoryContextForUser(userId) {
+  return withTransaction(async (db) => {
+    await ensureUserExists(db, userId);
+    return loadUserMemoryContext(db, {
+      userId,
+      limit: 60,
+    });
+  });
+}
+
+async function persistMemoryForRequest({ userId, text, routeResult, execution, stage }) {
+  return withTransaction(async (db) => {
+    await ensureUserExists(db, userId);
+    await persistMemoryTurn(db, {
+      userId,
+      text,
+      routeResult,
+      execution: {
+        ok: execution?.ok ?? false,
+        stage,
+      },
+      source: "agent_api_turn",
+    });
+  });
 }
 
 async function resolveRouteResult(payload) {
@@ -88,12 +135,30 @@ export async function POST(request) {
   try {
     await ensureMigrations();
 
-    const routeResult = await resolveRouteResult(payload);
+    const memoryContext = await resolveMemoryContextForUser(payload.userId);
+    const payloadWithMemory = {
+      ...payload,
+      context: mergeContextWithMemory(payload.context, memoryContext),
+    };
+
+    const routeResult = await resolveRouteResult(payloadWithMemory);
     if (!routeResult) {
       return NextResponse.json({ message: "Unable to resolve route result." }, { status: 400 });
     }
 
     if (routeResult.need_clarification) {
+      try {
+        await persistMemoryForRequest({
+          userId: payload.userId,
+          text: payload.text,
+          routeResult,
+          execution: { ok: true },
+          stage: "routing",
+        });
+      } catch (memoryError) {
+        console.error("persistMemoryForRequest(routing) failed:", memoryError);
+      }
+
       return NextResponse.json({
         ok: false,
         stage: "routing",
@@ -108,6 +173,18 @@ export async function POST(request) {
       entities: routeResult.entities,
       text: payload.text,
     });
+
+    try {
+      await persistMemoryForRequest({
+        userId: payload.userId,
+        text: payload.text,
+        routeResult,
+        execution,
+        stage: "workflow",
+      });
+    } catch (memoryError) {
+      console.error("persistMemoryForRequest(workflow) failed:", memoryError);
+    }
 
     if (!execution.ok) {
       const status = execution.error?.status || 500;

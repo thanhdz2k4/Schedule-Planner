@@ -136,6 +136,7 @@ function buildSystemPrompt(todayISO) {
     "If required data is missing for execution, set need_clarification=true and ask a short question in Vietnamese.",
     "Prioritize entities: title, date(YYYY-MM-DD), start(HH:mm), end(HH:mm), duration_minutes, priority, status, target, deadline, minutes_before.",
     "If the user is sending a follow-up reply, reuse previous-turn context to fill missing entities.",
+    "If memory_facts are available, treat them as user preferences and constraints. Do not hallucinate facts not present in memory_facts.",
   ].join("\n");
 }
 
@@ -143,6 +144,33 @@ function buildContextPrompt(context) {
   if (!context || typeof context !== "object") {
     return null;
   }
+
+  const memoryFacts = Array.isArray(context.memory_facts)
+    ? context.memory_facts
+        .map((item) => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) {
+            return null;
+          }
+
+          const type = typeof item.type === "string" ? item.type.trim() : "";
+          const key = typeof item.key === "string" ? item.key.trim() : "";
+          const value = typeof item.value === "string" ? item.value.trim() : "";
+          if (!type || !key || !value) {
+            return null;
+          }
+
+          const confidence = Number(item.confidence);
+          return {
+            type,
+            key,
+            value,
+            confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : 0.7,
+            source: typeof item.source === "string" ? item.source.trim() : "memory",
+          };
+        })
+        .filter(Boolean)
+        .slice(0, 20)
+    : [];
 
   const payload = {
     intent: typeof context.intent === "string" ? context.intent : null,
@@ -154,9 +182,10 @@ function buildContextPrompt(context) {
       typeof context.last_user_text === "string" ? context.last_user_text : null,
     last_agent_question:
       typeof context.last_agent_question === "string" ? context.last_agent_question : null,
+    memory_facts: memoryFacts,
   };
 
-  if (!payload.intent && !Object.keys(payload.entities).length) {
+  if (!payload.intent && !Object.keys(payload.entities).length && !payload.memory_facts.length) {
     return null;
   }
 

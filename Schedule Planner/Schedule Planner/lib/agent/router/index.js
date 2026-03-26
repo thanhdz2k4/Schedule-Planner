@@ -38,9 +38,51 @@ function normalizeIntent(rawIntent) {
   return typeof rawIntent === "string" && ALLOWED_INTENTS.has(rawIntent) ? rawIntent : null;
 }
 
+function normalizeMemoryFacts(rawMemoryFacts) {
+  if (!Array.isArray(rawMemoryFacts)) {
+    return [];
+  }
+
+  return rawMemoryFacts
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return null;
+      }
+
+      const type = typeof item.type === "string" ? item.type.trim() : "";
+      const key = typeof item.key === "string" ? item.key.trim() : "";
+      const value = typeof item.value === "string" ? item.value.trim() : "";
+      if (!type || !key || !value) {
+        return null;
+      }
+
+      const confidence = Number(item.confidence);
+      const normalizedConfidence = Number.isFinite(confidence)
+        ? Math.max(0, Math.min(1, confidence))
+        : 0.7;
+      const source = typeof item.source === "string" && item.source.trim() ? item.source.trim() : "memory";
+
+      return {
+        type,
+        key,
+        value,
+        confidence: normalizedConfidence,
+        source,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 30);
+}
+
 function normalizeContext(rawContext) {
   if (!rawContext || typeof rawContext !== "object" || Array.isArray(rawContext)) {
-    return { intent: null, entities: {}, last_user_text: null, last_agent_question: null };
+    return {
+      intent: null,
+      entities: {},
+      last_user_text: null,
+      last_agent_question: null,
+      memory_facts: [],
+    };
   }
 
   const entities =
@@ -57,6 +99,7 @@ function normalizeContext(rawContext) {
       typeof rawContext.last_agent_question === "string"
         ? rawContext.last_agent_question.trim()
         : null,
+    memory_facts: normalizeMemoryFacts(rawContext.memory_facts),
   };
 }
 
@@ -208,12 +251,13 @@ function resolveMissingFields(intent, entities) {
   return [...new Set(missing)];
 }
 
-function toContextForNextTurn(result, inputText) {
+function toContextForNextTurn(result, inputText, memoryFacts) {
   return {
     intent: result.intent,
     entities: result.entities,
     last_user_text: inputText,
     last_agent_question: result.need_clarification ? result.clarifying_question : null,
+    memory_facts: Array.isArray(memoryFacts) ? memoryFacts : [],
   };
 }
 
@@ -255,14 +299,20 @@ function finalizeRouterResult({ rawResult, source, context, inputText }) {
 
   return {
     ...result,
-    context_for_next_turn: toContextForNextTurn(result, inputText),
+    context_for_next_turn: toContextForNextTurn(result, inputText, context.memory_facts),
   };
 }
 
 function routeUserTextByRules({
   text,
   now = new Date(),
-  context = { intent: null, entities: {}, last_user_text: null, last_agent_question: null },
+  context = {
+    intent: null,
+    entities: {},
+    last_user_text: null,
+    last_agent_question: null,
+    memory_facts: [],
+  },
 }) {
   const scoring = scoreIntentCandidates(text);
   const topCandidate = scoring.topCandidate;

@@ -75,3 +75,11 @@ Telegram Update Webhook
 5. Kiem tra log/history qua:
    - `GET /api/chat/threads`
    - `GET /api/chat/threads/{id}/messages`
+
+## 10. Cac phase tiep theo de tang chat luong AI workflow
+
+- Phase 8-13: memory, retrieval, planner, tool runtime, multimodal, readiness.
+- Phase 14: mo rong workflow coverage.
+- Phase 15: them reasoning + verification loop.
+- Phase 16: benchmark + guardrail chong regression.
+- Phase 17: domain workflow packs theo nhom user.

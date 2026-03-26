@@ -1,110 +1,74 @@
-# Phase 7 - Query Data Bằng SQL Template
+# Phase 7 - Delivery Analytics SQL Templates
 
-## 1. Mục tiêu
+## 1. Muc tieu
 
-- Trả lời ổn định các câu hỏi thống kê phổ biến.
-- Không phụ thuộc LLM sinh SQL tự do.
-- Tạo lớp query an toàn và dễ kiểm thử.
+- Co bo query read-only de quan sat hieu qua reminder da kenh.
+- Ho tro chatbot/agent tra loi cau hoi van hanh ma khong can Text-to-SQL tu do.
+- Tao duoc dashboard co so cho team product/ops.
 
-## 2. Phạm vi
+## 2. Pham vi
 
-Trong phase này làm:
+Trong phase nay lam:
 
-- Mapping pattern câu hỏi -> SQL template.
-- Query read-only bằng parameterized SQL.
-- Format trả lời chuẩn cho chatbot.
+- Mapping cau hoi thong ke -> SQL template.
+- API query read-only cho delivery + integration health.
+- Response formatter cho dashboard/chat.
 
-Chưa làm:
+Chua lam:
 
-- Text-to-SQL tổng quát.
+- Text-to-SQL dynamic (khong can trong roadmap moi tu phase nay).
 
-## 3. Cấu trúc code đề xuất
+## 3. Danh sach query bat buoc v1
+
+1. Ty le gui reminder thanh cong 7 ngay gan nhat.
+2. So reminder fail theo channel.
+3. So user chua ket noi kenh nao.
+4. Top task bi nhac nhieu lan (retry cao).
+5. Avg do tre gui reminder so voi `send_at`.
+
+## 4. Cau truc code de xuat
 
 ```text
 lib/query/
-  intentPatterns.js
-  sqlTemplates.js
-  queryExecutor.js
-  responseFormatter.js
-app/api/sql/query/route.js
+  reminderIntentPatterns.js
+  reminderSqlTemplates.js
+  reminderQueryExecutor.js
+  reminderResponseFormatter.js
+app/api/analytics/query/route.js
 ```
 
-## 4. Danh sách query bắt buộc v1
+## 5. SQL template mau
 
-- Còn bao nhiêu task chưa làm hôm nay.
-- Tổng giờ tuần này.
-- Task ưu tiên cao chưa hoàn thành.
-- Goal có nguy cơ trễ deadline.
-- So sánh tuần này với tuần trước.
-
-## 5. Template SQL mẫu
-
-Ví dụ câu:
-
-`Hôm nay tôi còn bao nhiêu task chưa làm?`
+### 5.1 Success rate 7 ngay
 
 ```sql
-SELECT COUNT(*)::int AS pending_count
-FROM tasks
+SELECT
+  COUNT(*) FILTER (WHERE status = 'sent')::float / NULLIF(COUNT(*), 0) AS success_rate
+FROM reminder_jobs
 WHERE user_id = $1
-  AND date = CURRENT_DATE
-  AND status <> 'done';
+  AND send_at >= NOW() - INTERVAL '7 days';
 ```
 
-Ví dụ câu:
-
-`Task ưu tiên cao nào chưa hoàn thành?`
+### 5.2 Fail count theo channel
 
 ```sql
-SELECT id, title, date, start_time, end_time
-FROM tasks
+SELECT integration_id, COUNT(*)::int AS failed_count
+FROM reminder_jobs
 WHERE user_id = $1
-  AND priority = 'high'
-  AND status <> 'done'
-ORDER BY date, start_time
-LIMIT 20;
+  AND status = 'failed'
+GROUP BY integration_id
+ORDER BY failed_count DESC;
 ```
 
-## 6. Các bước thực hành chi tiết
+## 6. API contract de xuat
 
-### Bước 1 - Pattern matching
-
-- Dùng regex/từ khóa xác định loại query.
-- Trích entity: khoảng thời gian, priority, status.
-
-### Bước 2 - SQL template map
-
-- Mỗi query type có SQL cố định.
-- Chỉ truyền params, không nối chuỗi SQL trực tiếp.
-
-### Bước 3 - Query executor
-
-- Thiết kế lớp chạy query:
-  - timeout
-  - log duration
-  - error handling
-
-### Bước 4 - Response formatter
-
-- Trả 2 kiểu:
-  - ngắn gọn
-  - có gợi ý hành động
-
-### Bước 5 - Unit test
-
-- Mỗi template có test input/output.
-- Có test edge cases khi không có dữ liệu.
-
-## 7. API contract đề xuất
-
-`POST /api/sql/query`
+`POST /api/analytics/query`
 
 Input:
 
 ```json
 {
-  "userId": "uuid",
-  "text": "Tuần này tổng số giờ làm việc là bao nhiêu?"
+  "text": "7 ngay qua reminder Gmail thanh cong bao nhieu phan tram?"
 }
 ```
 
@@ -112,34 +76,36 @@ Output:
 
 ```json
 {
-  "queryType": "weekly_total_hours",
-  "data": { "totalHours": 21.5 },
-  "summary": "Tuần này bạn có tổng 21.5 giờ làm việc."
+  "queryType": "delivery_success_rate_7d",
+  "data": {
+    "successRate": 0.93
+  },
+  "summary": "7 ngay qua, reminder thanh cong 93%."
 }
 ```
 
-## 8. Kiểm thử tối thiểu
+## 7. Checklist trien khai
 
-- 20 query test pass.
-- 0 trường hợp SQL injection do dùng params.
-- Thời gian phản hồi ổn định cho query phổ biến.
+1. Chot query types va response schema.
+2. Viet SQL templates parameterized.
+3. Them timeout + query duration log.
+4. Them formatter cho nguyen van dashboard/chat.
+5. Viet unit test cho tung template.
 
-## 9. Lỗi thường gặp và cách xử lý
+## 8. Kiem thu toi thieu
 
-| Lỗi | Nguyên nhân | Cách xử lý |
-|---|---|---|
-| Trả sai câu hỏi | Pattern match kém | Tăng độ phủ regex + synonym |
-| Query chậm | Thiếu index | Bổ sung index theo filter |
-| Kết quả khó hiểu | Format text chưa tốt | Thêm response templates |
+- 20 query test pass (gom edge case khong co du lieu).
+- SQL injection test: tat ca input phai qua params.
+- Query p95 latency dat muc muc tieu noi bo.
 
-## 10. Tiêu chí hoàn thành
+## 9. Tieu chi hoan thanh
 
-- Query phổ biến trả đúng và nhất quán.
-- API query có contract rõ.
-- Có test dataset ổn định cho regression.
+- Team co endpoint thong ke delivery on-demand.
+- Dashboard co so co the dung ngay.
+- Agent co the tra loi nhom cau hoi van hanh pho bien.
 
-## 11. Output cần nộp
+## 10. Output can nop
 
-- File mapping pattern-template.
-- 20 test cases.
-- 5 response mẫu theo tone khác nhau.
+- File mapping intent -> template.
+- Bo test SQL templates.
+- Dashboard screenshot cho 5 metric chinh.

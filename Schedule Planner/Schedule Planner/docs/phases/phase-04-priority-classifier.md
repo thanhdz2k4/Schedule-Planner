@@ -1,108 +1,140 @@
-# Phase 4 - Priority Classifier
+# Phase 4 - Nango Integration Foundation
 
-## 1. Mục tiêu
+## 1. Muc tieu
 
-- Tự động gán độ ưu tiên task (`high`, `medium`, `low`).
-- Có thể giải thích vì sao task được xếp hạng như vậy.
-- Cho phép user override thủ công.
+- Chuan hoa lop ket noi API ben ngoai qua Nango.
+- Tao flow OAuth an toan de user ket noi tai khoan (uu tien Gmail).
+- Luu va quan ly `connection_id` theo user noi bo, san sang cho reminder da kenh.
 
-## 2. Phạm vi
+## 2. Pham vi
 
-Trong phase này làm:
+Trong phase nay lam:
 
-- Rule-based classifier.
-- Lưu metadata phân loại.
-- Hiển thị màu ưu tiên trên UI.
+- Tich hop Nango Connect Session flow (backend + frontend).
+- Nhan webhook auth tu Nango, verify chu ky, luu ket qua ket noi.
+- Dinh nghia model DB generic cho multi-platform integrations.
 
-Tùy chọn nâng cao:
+Chua lam:
 
-- Tích hợp LLM để refine score.
+- Gui reminder qua Gmail (se lam o Phase 5).
+- Mo rong kenh thu 2 (se lam o Phase 6).
 
-## 3. Thiết kế scoring rule v1
+## 3. Kien truc luong ket noi
 
-### 3.1 Điểm theo thời gian
+1. Frontend bam "Connect Gmail".
+2. Backend goi Nango tao connect session token.
+3. Frontend mo Nango Connect UI.
+4. User authorize Google OAuth.
+5. Nango goi webhook `auth` ve backend.
+6. Backend luu `integration_id`, `connection_id`, `user_id`, `status`.
 
-- Deadline trong 24h: +4
-- Deadline trong 48h: +2
-- Quá hạn: +5
+## 4. Bien moi truong can co
 
-### 3.2 Điểm theo từ khóa
-
-- Từ khóa khẩn (`gấp`, `khẩn`, `urgent`, `production`): +3
-- Từ khóa thông thường (`học`, `đọc`, `tham khảo`): +1
-
-### 3.3 Điểm theo context goal
-
-- Liên quan goal gần deadline và progress thấp: +3
-- Liên quan goal bình thường: +1
-
-### 3.4 Mapping điểm -> priority
-
-- `score >= 7` -> `high`
-- `4 <= score <= 6` -> `medium`
-- `score <= 3` -> `low`
-
-## 4. Trường DB cần lưu thêm
-
-Trong bảng `tasks`:
-
-- `priority`
-- `priority_source` (`manual`, `rule`, `ai`)
-- `priority_reason` (text ngắn)
-- `priority_score` (số)
-
-## 5. Cấu trúc code đề xuất
-
-```text
-lib/priority/
-  scoreRules.js
-  classifier.js
-  explain.js
+```env
+NANGO_SECRET_KEY=
+NANGO_BASE_URL=https://api.nango.dev
+NANGO_WEBHOOK_SECRET=
+NANGO_INTEGRATION_GMAIL=gmail
 ```
 
-Gợi ý interface:
+Ghi chu:
 
-```js
-classifyPriority({ title, deadline, goalContext }) 
-// => { priority, score, reason, source }
+- `NANGO_SECRET_KEY`: dung cho API server-to-server.
+- `NANGO_WEBHOOK_SECRET`: dung verify webhook signature.
+- Tach ro dev/staging/prod key, khong dung chung.
+
+## 5. DB model de xuat (generic)
+
+Tao bang moi (hoac migrate tu `messenger_connections`) ten `integration_connections`:
+
+- `id` (uuid)
+- `user_id` (uuid, FK users)
+- `integration_id` (vd: `gmail`, `slack`, `teams`)
+- `connection_id` (string, unique theo integration)
+- `provider` (vd: `google-mail`)
+- `status` (`active`, `disconnected`, `error`)
+- `last_error` (text, nullable)
+- `connected_at`
+- `updated_at`
+
+Chi so de xuat:
+
+- unique (`user_id`, `integration_id`)
+- index (`connection_id`)
+
+## 6. API contract de xuat
+
+### 6.1 `POST /api/integrations/connect/session`
+
+Input:
+
+```json
+{
+  "integrationId": "gmail"
+}
 ```
 
-## 6. Tích hợp vào workflow
+Output:
 
-- `create_task`: nếu user không set priority, chạy classifier.
-- `update_task`: nếu update title/deadline, re-score.
-- Nếu user chọn tay -> `priority_source=manual`.
+```json
+{
+  "sessionToken": "<NANGO_CONNECT_SESSION_TOKEN>"
+}
+```
 
-## 7. Hiển thị UI
+Ghi chu:
 
-- Timeline task card có màu theo priority.
-- Dashboard/Reminders/Calendar cùng hệ màu.
-- Badge hiển thị `Cao/Trung bình/Thấp`.
+- Backend tao token bang Nango API create connect session.
+- Gan tags bat buoc: `end_user_id`, `end_user_email`.
 
-## 8. Kiểm thử tối thiểu
+### 6.2 `POST /api/integrations/webhooks/nango`
 
-- 20 case với expected priority.
-- Test override:
-  - user set thủ công phải được giữ.
-- Test consistency:
-  - cùng input -> cùng output.
+- Verify signature tu header webhook.
+- Chi xu ly event auth lien quan toi connection.
+- Upsert vao `integration_connections`.
 
-## 9. Lỗi thường gặp và cách xử lý
+### 6.3 `GET /api/integrations/connections`
 
-| Lỗi | Nguyên nhân | Cách xử lý |
-|---|---|---|
-| Priority cao quá nhiều | Rule threshold quá thấp | Tăng ngưỡng high |
-| Reason khó hiểu | Explain string quá chung | Viết template reason rõ điều kiện |
-| UI lệch màu giữa các page | CSS class không thống nhất | Chuẩn hóa class `priority-*` |
+- Tra danh sach ket noi hien tai cua user.
+- Frontend dung de hien thi state connected/disconnected.
 
-## 10. Tiêu chí hoàn thành
+## 7. Checklist trien khai
 
-- Task mới có priority tự động hợp lý.
-- User override hoạt động.
-- UI phản ánh priority đồng bộ.
+1. Tao service `lib/integrations/nangoClient.js`.
+2. Implement endpoint tao connect session token.
+3. Gan Connect UI vao trang setting/account.
+4. Tao endpoint webhook + verify signature.
+5. Upsert `integration_connections` khi auth success.
+6. Them reconnect button cho connection invalid.
 
-## 11. Output cần nộp
+## 8. Bao mat bat buoc
 
-- Bảng test case + kết quả.
-- Thống kê accuracy nội bộ.
-- Ảnh demo màu priority trên 3 màn hình.
+- Khong expose `NANGO_SECRET_KEY` len frontend.
+- Khong tin `connection_id` tu frontend o production.
+- Webhook phai verify signature truoc khi ghi DB.
+- Ghi log co redact secrets/token.
+
+## 9. Kiem thu toi thieu
+
+- Tao connect session token thanh cong.
+- OAuth flow Gmail thanh cong, webhook vao duoc.
+- `integration_connections` co 1 ban ghi `active`.
+- Thu case webhook signature sai -> bi reject.
+
+## 10. Tieu chi hoan thanh
+
+- User co the ket noi Gmail tu UI.
+- He thong luu dung mapping user <-> connection.
+- Co API read state ket noi de UI hien thi.
+
+## 11. Output can nop
+
+- Migration SQL cho `integration_connections`.
+- Screenshot/record OAuth ket noi Gmail thanh cong.
+- Log webhook auth success + 1 log reject signature sai.
+
+## 12. Tai lieu tham khao Nango
+
+- Implement API auth: https://nango.dev/docs/implementation-guides/platform/auth/implement-api-auth
+- Auth/webhook events: https://docs.nango.dev/guides/webhooks/webhooks-from-nango
+- Get connection status: https://nango.dev/docs/reference/api/connections/get

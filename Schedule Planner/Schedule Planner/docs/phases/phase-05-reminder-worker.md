@@ -1,121 +1,146 @@
-# Phase 5 - Reminder Scheduler (Mock Channel)
+# Phase 5 - Gmail Reminder Delivery (via Nango)
 
-## 1. Mục tiêu
+## 1. Muc tieu
 
-- Tự động gửi nhắc việc trước 5 phút.
-- Chạy worker ổn định với retry có giới hạn.
-- Chưa phụ thuộc Messenger thật (gửi mock trước).
+- Gui reminder "sap den lich" bang Gmail thong qua ket noi Nango.
+- Van hanh on dinh voi retry, idempotency, va logging day du.
+- Giu luong worker doc lap de sau nay them kenh moi khong pha vo code.
 
-## 2. Phạm vi
+## 2. Pham vi
 
-Trong phase này làm:
+Trong phase nay lam:
 
-- Tạo `reminder_jobs` lifecycle.
-- Tạo worker poll/dispatch.
-- Mock sender để xác nhận luồng.
+- Noi `reminder_jobs` voi `integration_connections` (`integration_id = gmail`).
+- Gui email reminder qua Nango (Proxy hoac Action).
+- Ghi nhan ket qua delivery vao DB.
 
-Chưa làm:
+Chua lam:
 
-- Gửi qua Messenger API thật.
+- Multi-channel fallback (Phase 6).
+- Channel intelligence (Phase 8).
 
-## 3. Luồng reminder chuẩn
+## 3. Luong reminder Gmail
 
-1. Task create/update -> tính `send_at = start_time - 5 phút`.
-2. Upsert job `pending`.
-3. Worker poll job đến hạn.
-4. Gửi message qua mock sender.
-5. Thành công -> `sent`; lỗi -> retry hoặc `failed`.
+1. Task create/update -> tinh `send_at = start_time - lead_time`.
+2. Tao/Upsert `reminder_jobs` status `pending`.
+3. Worker quet job den han.
+4. Worker load connection Gmail active cua user.
+5. Worker goi Nango de gui email reminder.
+6. Thanh cong -> `sent`; loi -> retry hoac `failed`.
 
-## 4. Trạng thái job đề xuất
+## 4. DB cap nhat de xuat
 
-- `pending`
-- `processing`
-- `sent`
-- `failed`
-- `canceled`
+Bo sung truong cho `reminder_jobs`:
 
-## 5. Cấu trúc code đề xuất
+- `integration_id` (mac dinh `gmail`)
+- `connection_id` (nullable, gan khi dispatch)
+- `delivery_provider` (vd: `nango-gmail`)
+- `external_message_id` (message id tu Gmail/Nango)
+
+Them bang log delivery (khuyen nghi):
+
+- `reminder_deliveries`
+- luu request id, error code, retry count, duration.
+
+## 5. Cau truc code de xuat
 
 ```text
 worker/
   reminderWorker.js
 lib/reminder/
   scheduler.js
-  senderMock.js
   retryPolicy.js
+  formatter.js
+lib/integrations/
+  nangoClient.js
+  gmailSender.js
 ```
 
-## 6. Các bước thực hành chi tiết
+## 6. Cach gui Gmail qua Nango
 
-### Bước 1 - Upsert reminder job
+Huong de xuat cho phase nay:
 
-- Tại workflow task create/update:
-  - Tính `send_at`.
-  - Upsert job theo `task_id`.
+- Bat dau voi Nango Proxy de gui Gmail API call.
+- Chuan bi abstraction de sau nay co the doi sang Nango Action.
 
-### Bước 2 - Polling worker
+Hop dong ham:
 
-- Chu kỳ 15-30 giây.
-- Query:
-  - `status='pending'`
-  - `send_at <= now()`
-  - `retry_count < max_retry`
+```js
+sendGmailReminder({
+  connectionId,
+  integrationId: "gmail",
+  toEmail,
+  subject,
+  htmlBody,
+  textBody
+});
+```
 
-### Bước 3 - Dispatch logic
+Note:
 
-- Đặt trạng thái tạm `processing`.
-- Gọi `senderMock.send()`.
-- Thành công -> `sent`, set `sent_at`.
-- Lỗi -> tăng `retry_count`, set `next_retry_at`.
+- Gmail send message yeu cau payload MIME (RFC 2822) dang `raw` (base64url).
+- Luu y timezone khi tao noi dung nhac lich.
 
-### Bước 4 - Retry policy
+## 7. Retry va idempotency
 
-Ví dụ:
+Retry policy de xuat:
 
-- Lần 1: +30s
-- Lần 2: +120s
-- Lần 3: +300s
-- Quá ngưỡng: `failed`
+- Lan 1: +30s
+- Lan 2: +120s
+- Lan 3: +300s
+- Qua nguong: `failed`
 
-### Bước 5 - Idempotency
+Idempotency:
 
-- Dùng `reminder_job.id` làm idempotency key.
-- Worker không gửi lại nếu đã `sent`.
+- Moi `reminder_job.id` chi duoc danh dau `sent` 1 lan.
+- Truoc khi gui phai lock row/job (hoac optimistic check status).
 
-## 7. Kiểm thử tối thiểu
+## 8. Template email reminder v1
 
-- Case thành công:
-  - task bắt đầu sau 6 phút -> job gửi đúng.
-- Case lỗi:
-  - mock sender fail 2 lần -> retry -> sent/fail theo policy.
-- Case cancel:
-  - xóa task -> job `canceled`.
+Subject:
 
-## 8. Quan sát hệ thống
+```text
+[Schedule Planner] Nhac lich: "{task_title}" bat dau sau 5 phut
+```
 
-Log mỗi lần worker chạy:
+Body:
 
-- số job quét được
-- số job gửi thành công
-- số job thất bại
-- thời gian xử lý batch
+```text
+Xin chao,
+Ban co lich sap den:
+- Task: {task_title}
+- Thoi gian: {start_time} - {end_time}
+- Uu tien: {priority}
+```
 
-## 9. Lỗi thường gặp và cách xử lý
+## 9. Checklist trien khai
 
-| Lỗi | Nguyên nhân | Cách xử lý |
-|---|---|---|
-| Gửi trễ | Poll interval quá dài | Giảm interval hoặc dùng queue |
-| Gửi trùng | Thiếu idempotency | Khóa theo `job_id` + status check |
-| Job không tạo | Workflow task không gọi scheduler | Bổ sung hook bắt buộc |
+1. Mapping user -> gmail connection khi worker dispatch.
+2. Implement `gmailSender` qua Nango.
+3. Update lifecycle `reminder_jobs` + retry.
+4. Them endpoint test dispatch thu cong.
+5. Ghi log chi tiet moi lan send/retry/fail.
 
-## 10. Tiêu chí hoàn thành
+## 10. Kiem thu toi thieu
 
-- Reminder job sinh ra đúng khi tạo/cập nhật task.
-- Worker gửi đúng trước 5 phút (trong sai số chấp nhận được).
-- Retry chạy đúng policy.
+- Case success: task bat dau sau 6-7 phut -> nhan email dung thoi diem.
+- Case khong co connection: job fail ro ly do.
+- Case loi tam thoi: retry dung policy.
+- Case idempotency: khong gui trung khi worker restart.
 
-## 11. Output cần nộp
+## 11. Tieu chi hoan thanh
 
-- Log vòng đời 1 job success.
-- Log 1 case retry.
-- Ảnh/chứng cứ job status trong DB.
+- Reminder qua Gmail gui duoc o moi truong dev/staging.
+- Retry + failure handling hoat dong dung.
+- Co log va DB state de truy vet 1 job end-to-end.
+
+## 12. Output can nop
+
+- Log 1 job `sent` va 1 job `failed`.
+- Screenshot email reminder nhan duoc.
+- SQL snapshot `reminder_jobs` + `reminder_deliveries`.
+
+## 13. Tai lieu tham khao Nango
+
+- Nango Actions: https://nango.dev/docs/implementation-guides/actions/implement-an-action
+- Nango Proxy (example usage): https://nango.dev/docs/integrations/all/slack

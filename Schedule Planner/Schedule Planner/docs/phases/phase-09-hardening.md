@@ -1,114 +1,114 @@
-# Phase 9 - Quan Sát, Đánh Giá, Hardening
+# Phase 9 - Production Hardening for Integrations
 
-## 1. Mục tiêu
+## 1. Muc tieu
 
-- Làm hệ thống đủ ổn định để vận hành thật.
-- Đo được chất lượng theo từng lớp (router, workflow, reminder, query).
-- Có runbook xử lý sự cố.
+- Dat muc san sang production cho luong thong bao da kenh.
+- Giam rui ro van hanh khi phu thuoc API ben thu 3.
+- Co runbook ro rang cho auth, webhook, delivery incidents.
 
-## 2. Phạm vi
+## 2. Pham vi
 
-Trong phase này làm:
+Trong phase nay lam:
 
-- Metrics + dashboards.
-- Structured logging + trace id.
-- Cơ chế fallback và circuit breaker cơ bản.
-- Runbook vận hành.
+- Observability cho Nango + reminder worker + channel adapters.
+- Bao mat secret, webhook verification, rotation.
+- Incident response va SLO/SLA noi bo.
 
-## 3. Metrics bắt buộc
+## 3. Metrics bat buoc
 
-### 3.1 Router/Agent
+### 3.1 Integration/Auth
 
-- `intent_accuracy`
-- `clarification_rate`
-- `avg_route_latency_ms`
+- `connection_active_rate`
+- `reconnect_required_count`
+- `auth_webhook_failure_rate`
 
-### 3.2 Workflow
+### 3.2 Reminder Delivery
 
-- `workflow_success_rate`
-- `workflow_failure_by_intent`
-- `avg_workflow_latency_ms`
+- `delivery_success_rate_by_channel`
+- `delivery_latency_ms_p50/p95`
+- `fallback_usage_rate`
+- `retry_exhausted_count`
 
-### 3.3 Reminder
+### 3.3 Reliability
 
-- `reminder_delivery_rate`
-- `avg_reminder_delay_ms`
-- `failed_reminder_count`
+- `worker_uptime`
+- `queue_backlog`
+- `dead_letter_count` (neu co)
 
-### 3.4 Query
+## 4. Logging va tracing
 
-- `sql_template_success_rate`
-- `text2sql_guardrail_reject_rate`
-- `avg_query_latency_ms`
-
-## 4. Logging chuẩn
-
-Mỗi request/workflow cần có:
+Moi send attempt can co:
 
 - `trace_id`
+- `job_id`
 - `user_id`
-- `intent`
+- `channel`
+- `integration_id`
+- `connection_id` (masked)
 - `status`
 - `duration_ms`
-- `error_code` (nếu có)
+- `error_code`
 
-Không log:
+Cam ky:
 
-- access token
-- secret
-- raw credentials
+- Log token, refresh token, raw credentials.
 
 ## 5. Hardening checklist
 
-- Retry có giới hạn, không vòng lặp vô hạn.
-- Timeout cho API ngoài (Messenger/LLM/DB query).
-- Idempotency cho reminder send.
-- Graceful degradation:
-  - Router confidence thấp -> hỏi lại.
-  - Text-to-SQL fail -> fallback template query.
-- Healthcheck endpoints:
-  - app health
-  - db connectivity
-  - worker status
+1. Verify webhook signature 100% request.
+2. Secret rotation process cho Nango keys.
+3. Circuit breaker theo channel khi provider outage.
+4. Timeout + retry theo loai loi.
+5. Dead-letter strategy cho jobs fail lau.
+6. Backfill/replay command cho jobs that bai co kiem soat.
 
-## 6. Runbook sự cố tối thiểu
+## 6. Runbook su co toi thieu
 
-### Incident A - Reminder không gửi
+### Incident A - OAuth ket noi fail hang loat
 
-1. Kiểm tra worker còn chạy không.
-2. Kiểm tra `reminder_jobs` có pending đến hạn không.
-3. Kiểm tra messenger connection/token.
-4. Kiểm tra log lỗi gửi và retry count.
+1. Kiem tra Nango status + API logs.
+2. Kiem tra callback/cors settings.
+3. Kiem tra secret key va environment mismatch.
+4. Bat che do degrade: tam dung connect moi neu can.
 
-### Incident B - Query lỗi hàng loạt
+### Incident B - Webhook auth khong vao
 
-1. Kiểm tra DB timeout/chậm.
-2. Kiểm tra deploy thay đổi schema.
-3. Kiểm tra guardrail reject rate tăng bất thường.
+1. Kiem tra endpoint availability.
+2. Kiem tra signature validation.
+3. Kiem tra firewall/proxy settings.
+4. Replay event neu co co che.
 
-### Incident C - Router phân loại sai nhiều
+### Incident C - Delivery fail theo 1 channel
 
-1. Kiểm tra dataset drift (câu user mới).
-2. Kiểm tra threshold confidence.
-3. Cập nhật rules hoặc retrain classifier.
+1. Xac dinh channel adapter gap loi.
+2. Bat fallback channel cho user anh huong.
+3. Danh dau connection status `error`.
+4. Gui canh bao reconnect den user.
 
-## 7. Kiểm thử vận hành
+## 7. Kiem thu van hanh
 
-- Load test nhẹ:
-  - 50-100 request/phút.
-- Chaos test cơ bản:
-  - restart worker khi đang có pending jobs.
+- Load test: 100-300 reminder/phut (theo target).
+- Chaos test:
+  - restart worker khi backlog lon
+  - mock provider timeout 30%
 - Recovery test:
-  - token messenger hết hạn và refresh lại.
+  - reconnect flow sau khi token revoked
+  - replay dead-letter jobs
 
-## 8. Tiêu chí hoàn thành
+## 8. SLO de xuat
 
-- Có dashboard/biểu đồ theo dõi core metrics.
-- Có runbook để on-call xử lý lỗi chính.
-- Tỷ lệ thành công của các luồng chính đạt ngưỡng nội bộ.
+- Reminder send dung han (<= 60s sau `send_at`): >= 99%.
+- Delivery success rate tong: >= 97%.
+- Auth reconnect thoi gian phuc hoi trung binh: < 30 phut.
 
-## 9. Output cần nộp
+## 9. Tieu chi hoan thanh
 
-- Runbook markdown.
-- Ảnh dashboard metrics.
-- Báo cáo chất lượng bản release gần nhất.
+- Co dashboard metrics va alert cho nhom chi so chinh.
+- Co runbook + on-call checklist ap dung duoc.
+- Co bao cao reliability cho release candidate.
+
+## 10. Output can nop
+
+- Runbook markdown ban chinh thuc.
+- Dashboard screenshot + nguong alert.
+- Bao cao post-mortem mau cho 1 su co gia lap.

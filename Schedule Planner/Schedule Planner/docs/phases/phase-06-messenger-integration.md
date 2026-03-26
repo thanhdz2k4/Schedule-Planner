@@ -1,220 +1,112 @@
-# Phase 6 - Kết Nối Messenger Thật
+# Phase 6 - Multi-platform Notification Expansion (Nango)
 
-## Mục tiêu
+## 1. Muc tieu
 
-- Kết nối người dùng với kênh Messenger thật.
-- Gửi tin nhắc từ `reminder_jobs` (Phase 5) qua Messenger.
-- Có quy trình verify, test và debug rõ ràng.
+- Mo rong tu Gmail sang nhieu kenh thong bao khac qua cung mot abstraction.
+- Tach logic kenh (provider-specific) khoi reminder worker.
+- Cho phep user cau hinh kenh uu tien va fallback.
 
----
+## 2. Pham vi
 
-## 1. Phụ thuộc trước khi bắt đầu
+Trong phase nay lam:
 
-- Hoàn thành Phase 5 (`reminder_jobs` + worker).
-- Có HTTPS endpoint public (dev dùng tunnel như ngrok/cloudflared).
-- Có Facebook Page dùng để gửi nhận tin.
+- Thiet ke notification channel abstraction.
+- Them kenh thu 2 (goi y: Slack hoac Teams) qua Nango.
+- Implement fallback strategy `primary -> secondary`.
 
----
+Chua lam:
 
-## 2. Kiến trúc luồng
+- AI tu dong chon kenh (Phase 8).
 
-1. User bấm "Kết nối Messenger" trong app.
-2. App tạo phiên kết nối và redirect sang flow Facebook.
-3. Facebook gọi webhook verify + event callback về app.
-4. App lưu `page_id`, `recipient_id`, `access_token` (đã mã hóa).
-5. Worker đến giờ nhắc gọi `sendMessengerMessage`.
-6. Graph API trả thành công -> update `reminder_jobs.status = sent`.
-
----
-
-## 3. Biến môi trường bắt buộc
-
-```env
-MESSENGER_APP_ID=
-MESSENGER_APP_SECRET=
-MESSENGER_VERIFY_TOKEN=
-MESSENGER_PAGE_ACCESS_TOKEN=
-MESSENGER_API_VERSION=v20.0
-MESSENGER_GRAPH_BASE=https://graph.facebook.com
-APP_BASE_URL=https://your-public-domain
-```
-
-Ghi chú:
-- `MESSENGER_VERIFY_TOKEN`: chuỗi do bạn tự đặt, dùng để verify webhook.
-- `MESSENGER_PAGE_ACCESS_TOKEN`: token Page để gửi message.
-- Không commit `.env` lên git.
-
----
-
-## 4. API contract cần có
-
-## 4.1 `GET /api/messenger/webhook` (Facebook verify)
-
-Mục đích:
-- Facebook gọi endpoint này để xác nhận webhook.
-
-Điều kiện trả thành công:
-- `hub.mode === 'subscribe'`
-- `hub.verify_token === MESSENGER_VERIFY_TOKEN`
-
-Response:
-- Trả đúng `hub.challenge` (status 200).
-
-## 4.2 `POST /api/messenger/webhook` (nhận sự kiện)
-
-Mục đích:
-- Nhận event message, delivery, read...
-
-Việc cần làm:
-- Verify chữ ký header `X-Hub-Signature-256`.
-- Parse payload.
-- Lấy `sender.id` để map về user nội bộ.
-- Log event phục vụ debug.
-
-## 4.3 `POST /api/messenger/connect`
-
-Mục đích:
-- Khởi tạo flow kết nối Messenger từ app.
-
-Input đề xuất:
-- `userId`
-
-Output đề xuất:
-- `connectUrl` hoặc trạng thái kết nối hiện tại.
-
-## 4.4 Hàm gửi tin `sendMessengerMessage(userId, text)`
-
-Mục đích:
-- Worker gọi hàm này khi tới `send_at`.
-
-Request Graph API (mẫu):
-
-```http
-POST /v20.0/me/messages?access_token={PAGE_ACCESS_TOKEN}
-Content-Type: application/json
-```
-
-```json
-{
-  "recipient": { "id": "PSID_USER" },
-  "messaging_type": "MESSAGE_TAG",
-  "tag": "ACCOUNT_UPDATE",
-  "message": { "text": "Nhắc việc: 5 phút nữa bắt đầu task X" }
-}
-```
-
----
-
-## 5. DB fields cần lưu
-
-Bảng `messenger_connections` tối thiểu:
-
-- `id`
-- `user_id`
-- `platform` (`messenger`)
-- `page_id`
-- `recipient_id` (PSID)
-- `access_token_encrypted`
-- `is_active`
-- `connected_at`
-- `updated_at`
-
-Bảng `reminder_jobs` cần có:
-
-- `status` (`pending`, `sent`, `failed`, `canceled`)
-- `retry_count`
-- `last_error`
-- `sent_at`
-
----
-
-## 6. Bảo mật bắt buộc
-
-- Không log token thô.
-- Mã hóa token trước khi lưu DB.
-- Verify webhook signature trước khi xử lý payload.
-- Validate payload schema để tránh lỗi parser.
-- Áp dụng timeout + retry có giới hạn khi gọi Graph API.
-
-Pseudo-code verify signature:
-
-```js
-const crypto = require("crypto");
-
-function isValidSignature(rawBody, signatureHeader, appSecret) {
-  const expected = "sha256=" + crypto.createHmac("sha256", appSecret).update(rawBody).digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader || ""));
-}
-```
-
----
-
-## 7. Tích hợp vào Reminder Worker
-
-Khi worker lấy job `pending`:
-
-1. Load `messenger_connections` theo `user_id` và `is_active=true`.
-2. Build message theo template reminder.
-3. Gọi `sendMessengerMessage`.
-4. Thành công -> `status=sent`, set `sent_at`.
-5. Thất bại -> `status=failed` hoặc retry theo policy.
-
-Template nhắc việc đề xuất:
+## 3. Kien truc de xuat
 
 ```text
-Nhắc việc: 5 phút nữa bắt đầu "{task_title}".
-Thời gian: {start}-{end}
-Ưu tiên: {priority}
+Reminder Worker
+  -> Channel Orchestrator
+      -> Gmail Adapter (Nango)
+      -> Slack Adapter (Nango)
+      -> Teams Adapter (future)
 ```
 
----
+Contract chung:
 
-## 8. Kịch bản test end-to-end
+```ts
+sendReminder(channel, payload): Promise<DeliveryResult>
+```
 
-## 8.1 Test kết nối
+## 4. Mo hinh du lieu bo sung
 
-- Gọi `/api/messenger/connect`.
-- Hoàn tất flow Facebook.
-- DB có bản ghi `messenger_connections.is_active = true`.
+Bang `notification_channel_settings`:
 
-## 8.2 Test gửi tin thủ công
+- `user_id`
+- `channel` (`gmail`, `slack`, `teams`)
+- `integration_id`
+- `connection_id`
+- `is_enabled`
+- `priority_order`
+- `quiet_hours_config` (jsonb)
 
-- Tạo endpoint nội bộ test gửi.
-- Gửi 1 tin "test reminder".
-- Xác nhận tin xuất hiện trên Messenger.
+Bang `reminder_delivery_attempts`:
 
-## 8.3 Test reminder thật
+- `job_id`
+- `channel`
+- `attempt_no`
+- `status`
+- `error_code`
+- `error_message`
+- `sent_at`
 
-- Tạo task bắt đầu sau 6-7 phút.
-- Xác nhận có `reminder_job`.
-- Chờ đến `start - 5 phút`.
-- Kiểm tra tin nhắn nhận được.
-- Kiểm tra `reminder_jobs.status = sent`.
+## 5. Quy tac fallback de xuat
 
----
+1. Lay danh sach channel enable theo `priority_order`.
+2. Thu channel dau tien.
+3. Neu fail voi loi co the retry -> retry tai channel do.
+4. Neu loi hard fail (auth/permission) -> chuyen channel tiep theo.
+5. Neu het channel -> job `failed`.
 
-## 9. Troubleshooting nhanh
+## 6. API/UX can co
 
-| Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
-|---|---|---|
-| Verify webhook fail | Sai `verify_token` | Kiểm tra `MESSENGER_VERIFY_TOKEN` |
-| Không nhận event webhook | URL không public/HTTPS | Bật tunnel HTTPS, update callback URL |
-| Gửi tin fail 401/403 | Token hết hạn/sai quyền | Refresh token và cấp đúng permission |
-| Worker không gửi | Không map được `recipient_id` | Kiểm tra bảng `messenger_connections` |
-| Gửi trùng | Retry thiếu idempotency | Thêm idempotency theo `reminder_job.id` |
+- `GET /api/notification/channels`
+- `PUT /api/notification/channels`
+- `POST /api/notification/channels/{channel}/connect-session`
+- `POST /api/notification/channels/reconnect-session`
 
----
+UI:
 
-## 10. Tiêu chí hoàn thành phase
+- Trang "Integrations":
+  - Hien trang thai ket noi tung kenh.
+  - Nut Connect / Reconnect / Disable.
+  - Keo-tha thu tu uu tien kenh.
 
-- User kết nối Messenger thành công từ app.
-- Webhook verify thành công.
-- Gửi test message thành công.
-- Reminder thật được gửi trước giờ task 5 phút.
-- Có log đủ để truy vết lỗi.
+## 7. Checklist trien khai
 
-## Output cần nộp
+1. Tach `gmailSender` thanh adapter pattern.
+2. Tao interface chung cho moi channel adapter.
+3. Them 1 adapter moi (Slack/Teams) qua Nango.
+4. Them orchestration fallback.
+5. Update worker de goi orchestrator thay vi goi truc tiep Gmail.
+6. Them integration settings UI/API.
 
-- Ảnh/video kết nối thành công.
-- Ảnh/video nhận reminder thật.
-- Log 1 job `sent` và 1 case `failed` (nếu có) để chứng minh retry/error handling.
+## 8. Bao mat va van hanh
+
+- Kiem tra connection validity dinh ky.
+- Neu connection invalid: danh dau status `error`, canh bao reconnect.
+- Khong luu token provider trong app DB (chi luu metadata connection).
+
+## 9. Kiem thu toi thieu
+
+- User co 2 kenh active, kenh 1 fail -> kenh 2 send thanh cong.
+- User tat kenh 1 -> worker chi gui kenh 2.
+- Reconnect flow khac phuc duoc connection invalid.
+
+## 10. Tieu chi hoan thanh
+
+- Reminder worker gui duoc qua it nhat 2 kenh.
+- Fallback hoat dong dung theo policy.
+- User cau hinh duoc thu tu kenh tu UI/API.
+
+## 11. Output can nop
+
+- Demo video fallback 2 kenh.
+- Log delivery attempts theo tung channel.
+- Screenshot trang Integrations voi status ket noi.

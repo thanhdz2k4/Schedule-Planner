@@ -28,10 +28,13 @@ function toConnectionModel(row) {
   };
 }
 
+const CONNECTION_SELECT_COLUMNS =
+  "id, user_id, integration_id, connection_id, provider, status, last_error, connected_at, updated_at";
+
 export async function listIntegrationConnectionsByUser(db, userId) {
   const result = await db.query(
     `
-      SELECT id, user_id, integration_id, connection_id, provider, status, last_error, connected_at, updated_at
+      SELECT ${CONNECTION_SELECT_COLUMNS}
       FROM integration_connections
       WHERE user_id = $1::uuid
       ORDER BY integration_id ASC
@@ -45,7 +48,7 @@ export async function listIntegrationConnectionsByUser(db, userId) {
 export async function getIntegrationConnectionByUser(db, userId, integrationId) {
   const result = await db.query(
     `
-      SELECT id, user_id, integration_id, connection_id, provider, status, last_error, connected_at, updated_at
+      SELECT ${CONNECTION_SELECT_COLUMNS}
       FROM integration_connections
       WHERE user_id = $1::uuid
         AND integration_id = $2
@@ -59,6 +62,39 @@ export async function getIntegrationConnectionByUser(db, userId, integrationId) 
   }
 
   return toConnectionModel(result.rows[0]);
+}
+
+export async function getIntegrationConnectionByConnectionId(db, connectionId) {
+  const result = await db.query(
+    `
+      SELECT ${CONNECTION_SELECT_COLUMNS}
+      FROM integration_connections
+      WHERE connection_id = $1
+      LIMIT 1
+    `,
+    [connectionId]
+  );
+
+  if (!result.rowCount) {
+    return null;
+  }
+
+  return toConnectionModel(result.rows[0]);
+}
+
+export async function listActiveIntegrationConnectionsByIntegration(db, integrationId) {
+  const result = await db.query(
+    `
+      SELECT ${CONNECTION_SELECT_COLUMNS}
+      FROM integration_connections
+      WHERE integration_id = $1
+        AND status = 'active'
+      ORDER BY connected_at DESC, created_at DESC
+    `,
+    [integrationId]
+  );
+
+  return result.rows.map(toConnectionModel);
 }
 
 export async function upsertIntegrationConnection(
@@ -83,7 +119,7 @@ export async function upsertIntegrationConnection(
           ELSE integration_connections.connected_at
         END,
         updated_at = NOW()
-      RETURNING id, user_id, integration_id, connection_id, provider, status, last_error, connected_at, updated_at
+      RETURNING ${CONNECTION_SELECT_COLUMNS}
     `,
     [userId, integrationId, connectionId, provider, status, lastError || null]
   );

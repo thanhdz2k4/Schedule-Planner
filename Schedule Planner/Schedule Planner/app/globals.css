@@ -2552,3 +2552,20 @@ body.dark .dot {
     grid-template-columns: 1fr;
   }
 }
+
+.integration-destination-editor {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.integration-destination-editor input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 90%, white 10%);
+  color: inherit;
+  padding: 0.45rem 0.65rem;
+}

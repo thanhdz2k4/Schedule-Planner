@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
@@ -6,6 +6,7 @@ import AppShell from "@/components/AppShell";
 import { loadAuthSession } from "@/lib/authClient";
 import { usePlannerData } from "@/hooks/usePlannerData";
 import gmailIcon from "@/images/gmail.png";
+import telegramIcon from "@/images/telegram.png";
 
 const INTEGRATIONS = [
   {
@@ -15,6 +16,16 @@ const INTEGRATIONS = [
     description: "Send reminder emails before task start.",
     iconType: "image",
     iconImage: gmailIcon,
+    connectable: true,
+    supportsTestSend: true,
+  },
+  {
+    id: "telegram",
+    name: "Telegram",
+    group: "Communication",
+    description: "Send instant reminder messages to Telegram chat.",
+    iconType: "image",
+    iconImage: telegramIcon,
     connectable: true,
     supportsTestSend: true,
   },
@@ -144,7 +155,10 @@ export default function IntegrationsPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
   const [authSession, setAuthSession] = useState(null);
   const [connections, setConnections] = useState([]);
+  const [channelSettings, setChannelSettings] = useState([]);
+  const [destinationDrafts, setDestinationDrafts] = useState({});
   const [loadingConnections, setLoadingConnections] = useState(false);
+  const [loadingChannelSettings, setLoadingChannelSettings] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [busyActionId, setBusyActionId] = useState("");
@@ -206,9 +220,53 @@ export default function IntegrationsPage() {
     }
   }, [authSession?.token]);
 
+  const refreshChannelSettings = useCallback(async () => {
+    if (!authSession?.token) {
+      setChannelSettings([]);
+      return;
+    }
+
+    setLoadingChannelSettings(true);
+
+    try {
+      const response = await fetch("/api/notification/channels", {
+        cache: "no-store",
+        headers: buildAuthHeaders(authSession.token),
+      });
+
+      const payload = await readJsonSafe(response);
+      if (!response.ok) {
+        setError(payload?.message || "Cannot load channel settings.");
+        return;
+      }
+
+      setChannelSettings(Array.isArray(payload?.channels) ? payload.channels : []);
+    } catch (requestError) {
+      console.error(requestError);
+      setError("Cannot connect to server while loading channel settings.");
+    } finally {
+      setLoadingChannelSettings(false);
+    }
+  }, [authSession?.token]);
+
   useEffect(() => {
     refreshConnections();
-  }, [refreshConnections]);
+    refreshChannelSettings();
+  }, [refreshConnections, refreshChannelSettings]);
+
+  useEffect(() => {
+    if (!channelSettings.length) {
+      return;
+    }
+
+    setDestinationDrafts((previous) => {
+      const next = { ...previous };
+      for (const setting of channelSettings) {
+        next[setting.channel] = setting.destination || "";
+      }
+      return next;
+    });
+  }, [channelSettings]);
 
   const connectionsByIntegrationId = useMemo(() => {
     const map = new Map();
@@ -218,11 +276,20 @@ export default function IntegrationsPage() {
     return map;
   }, [connections]);
 
+  const channelSettingsById = useMemo(() => {
+    const map = new Map();
+    for (const setting of channelSettings) {
+      map.set(setting.channel, setting);
+    }
+    return map;
+  }, [channelSettings]);
+
   const integrationViewModels = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
     const withConnection = INTEGRATIONS.map((integration) => ({
       ...integration,
       connection: connectionsByIntegrationId.get(integration.id) || null,
+      channelSetting: channelSettingsById.get(integration.id) || null,
     }));
 
     return withConnection.filter((item) => {
@@ -239,7 +306,7 @@ export default function IntegrationsPage() {
 
       return cardStatus(item) === statusFilter;
     });
-  }, [connectionsByIntegrationId, searchText, statusFilter]);
+  }, [connectionsByIntegrationId, channelSettingsById, searchText, statusFilter]);
 
   const statusStats = useMemo(() => {
     const base = { connected: 0, not_connected: 0, error: 0, disconnected: 0, coming_soon: 0 };
@@ -324,9 +391,11 @@ export default function IntegrationsPage() {
                 setMessage("Connected in popup. Waiting sync from webhook...");
                 window.setTimeout(() => {
                   refreshConnections();
+                  refreshChannelSettings();
                 }, 2500);
                 window.setTimeout(() => {
                   refreshConnections();
+                  refreshChannelSettings();
                 }, 6000);
               }
             } catch (confirmError) {
@@ -334,11 +403,13 @@ export default function IntegrationsPage() {
               setError(confirmError instanceof Error ? confirmError.message : "Cannot confirm connection.");
             } finally {
               refreshConnections();
+              refreshChannelSettings();
             }
           }
 
           if (eventType === "close" || eventType.includes("close")) {
             refreshConnections();
+            refreshChannelSettings();
           }
         },
       });
@@ -352,33 +423,84 @@ export default function IntegrationsPage() {
     }
   }
 
-  async function handleSendTestGmail() {
+  async function handleSaveDestination(channelId) {
     if (!authSession?.token) {
       setError("Please login first.");
       return;
     }
 
-    setBusyActionId("test:gmail");
+    const currentSetting = channelSettingsById.get(channelId);
+    const destination = typeof destinationDrafts[channelId] === "string" ? destinationDrafts[channelId].trim() : "";
+
+    setBusyActionId(`save-destination:${channelId}`);
     setError("");
     setMessage("");
 
     try {
-      const response = await fetch("/api/integrations/gmail/test-send", {
-        method: "POST",
+      const response = await fetch("/api/notification/channels", {
+        method: "PUT",
         headers: buildAuthHeaders(authSession.token, "application/json"),
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          channels: [
+            {
+              channel: channelId,
+              isEnabled: currentSetting?.isEnabled ?? true,
+              priorityOrder: currentSetting?.priorityOrder ?? (channelId === "telegram" ? 1 : 2),
+              destination,
+            },
+          ],
+        }),
       });
 
       const payload = await readJsonSafe(response);
       if (!response.ok) {
-        setError(payload?.message || "Cannot send test Gmail email.");
+        setError(payload?.message || "Cannot save destination.");
         return;
       }
 
-      setMessage(payload?.message || "Test email sent.");
+      setChannelSettings(Array.isArray(payload?.channels) ? payload.channels : []);
+      setMessage(`${channelId} destination saved.`);
+    } catch (saveError) {
+      console.error(saveError);
+      setError("Unexpected error while saving destination.");
+    } finally {
+      setBusyActionId("");
+    }
+  }
+
+  async function handleSendTest(integrationId) {
+    if (!authSession?.token) {
+      setError("Please login first.");
+      return;
+    }
+
+    setBusyActionId(`test:${integrationId}`);
+    setError("");
+    setMessage("");
+
+    try {
+      const endpoint = integrationId === "telegram" ? "/api/integrations/telegram/test-send" : "/api/integrations/gmail/test-send";
+      const body =
+        integrationId === "telegram"
+          ? JSON.stringify({ chatId: toNonEmptyString(destinationDrafts.telegram) || undefined })
+          : JSON.stringify({});
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: buildAuthHeaders(authSession.token, "application/json"),
+        body,
+      });
+
+      const payload = await readJsonSafe(response);
+      if (!response.ok) {
+        setError(payload?.message || "Cannot send test message.");
+        return;
+      }
+
+      setMessage(payload?.message || "Test message sent.");
     } catch (sendError) {
       console.error(sendError);
-      setError("Unexpected error while sending test email.");
+      setError("Unexpected error while sending test message.");
     } finally {
       setBusyActionId("");
     }
@@ -440,12 +562,14 @@ export default function IntegrationsPage() {
         <div className="integration-cards-grid">
           {integrationViewModels.map((item) => {
             const status = cardStatus(item);
-            const isGmail = item.id === "gmail";
             const isConnected = status === "connected";
             const isConnecting = busyActionId === `connect:${item.id}`;
-            const isTesting = busyActionId === "test:gmail";
+            const isTesting = busyActionId === `test:${item.id}`;
+            const isSavingDestination = busyActionId === `save-destination:${item.id}`;
             const connectDisabled = !authSession?.token || !item.connectable || isConnecting;
-            const testDisabled = !authSession?.token || !isGmail || isTesting;
+            const testDisabled = !authSession?.token || !item.supportsTestSend || isTesting;
+            const destinationValue = destinationDrafts[item.id] || "";
+            const showDestinationEditor = item.id === "telegram";
 
             return (
               <article key={item.id} className={`integration-list-card ${status}`}>
@@ -469,10 +593,38 @@ export default function IntegrationsPage() {
                   <span className={`badge integration-status-badge status-${status}`}>
                     {isConnecting ? "Opening connect..." : connectionStatusToLabel(item.connection?.status)}
                   </span>
+                  {item.channelSetting ? <span className="badge">Priority: {item.channelSetting.priorityOrder}</span> : null}
+                  {item.channelSetting ? (
+                    <span className="badge">{item.channelSetting.isEnabled ? "Enabled" : "Disabled"}</span>
+                  ) : null}
                   {item.connection?.connectionId ? (
                     <span className="badge">ID: {item.connection.connectionId.slice(0, 10)}...</span>
                   ) : null}
                 </div>
+
+                {showDestinationEditor ? (
+                  <div className="integration-destination-editor">
+                    <input
+                      type="text"
+                      placeholder="Telegram chat id (vd: -1001234567890)"
+                      value={destinationValue}
+                      onChange={(event) =>
+                        setDestinationDrafts((prev) => ({
+                          ...prev,
+                          [item.id]: event.target.value,
+                        }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      disabled={!authSession?.token || isSavingDestination}
+                      onClick={() => handleSaveDestination(item.id)}
+                    >
+                      {isSavingDestination ? "Saving..." : "Save chat id"}
+                    </button>
+                  </div>
+                ) : null}
 
                 <div className="integration-actions-row">
                   <button
@@ -484,15 +636,19 @@ export default function IntegrationsPage() {
                     {item.connectable ? (isConnected ? "Reconnect" : "Connect") : "Coming soon"}
                   </button>
 
-                  {isGmail ? (
+                  {item.supportsTestSend ? (
                     <button
                       type="button"
                       className="btn ghost"
                       disabled={testDisabled}
-                      onClick={handleSendTestGmail}
-                      title={isConnected ? "Send test email now" : "Will show why test send cannot run yet"}
+                      onClick={() => handleSendTest(item.id)}
+                      title={isConnected ? "Send test now" : "Will show why test send cannot run yet"}
                     >
-                      {isTesting ? "Sending..." : "Send test email"}
+                      {isTesting
+                        ? "Sending..."
+                        : item.id === "telegram"
+                        ? "Send test message"
+                        : "Send test email"}
                     </button>
                   ) : null}
                 </div>
@@ -501,7 +657,7 @@ export default function IntegrationsPage() {
           })}
         </div>
 
-        {loadingConnections ? <p className="muted">Refreshing connection states...</p> : null}
+        {loadingConnections || loadingChannelSettings ? <p className="muted">Refreshing integration states...</p> : null}
         {!authSession?.token ? <p className="alert">Please login account first to connect integrations.</p> : null}
         {error ? <p className="alert">{error}</p> : null}
         {!error && message ? <p className="integration-success">{message}</p> : null}

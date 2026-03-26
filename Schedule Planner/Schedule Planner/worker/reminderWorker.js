@@ -1,13 +1,24 @@
-import { withTransaction } from "@/lib/db/client";
+﻿import { withTransaction } from "@/lib/db/client";
 import { ensureMigrations } from "@/lib/db/migrate";
-import { getIntegrationConnectionByUser } from "@/lib/db/queries/integrationConnectionQueries";
+import { listIntegrationConnectionsByUser } from "@/lib/db/queries/integrationConnectionQueries";
+import {
+  ensureDefaultNotificationChannelSettings,
+  listNotificationChannelSettingsByUser,
+} from "@/lib/db/queries/notificationChannelSettingQueries";
 import { GmailSendError, sendGmailReminder } from "@/lib/integrations/gmailSender";
+import { sendTelegramReminder, TelegramSendError } from "@/lib/integrations/telegramSender";
 import { buildReminderEmailContent } from "@/lib/reminder/formatter";
 import { DEFAULT_INTEGRATION_ID } from "@/lib/reminder/scheduler";
 import { getNextRetryAt, shouldRetryReminder } from "@/lib/reminder/retryPolicy";
 
 const DEFAULT_BATCH_SIZE = 20;
-const DELIVERY_PROVIDER = "nango-gmail";
+const DEFAULT_CHANNEL_ORDER = ["telegram", "gmail"];
+const SUPPORTED_CHANNELS = new Set(DEFAULT_CHANNEL_ORDER);
+
+const DELIVERY_PROVIDER_BY_CHANNEL = {
+  gmail: "nango-gmail",
+  telegram: "nango-telegram",
+};
 
 function normalizeBatchLimit(value) {
   const parsed = Number.parseInt(value, 10);
@@ -75,9 +86,9 @@ function mapReminderJobRow(row) {
 }
 
 function summarizeError(error) {
-  if (error instanceof GmailSendError) {
+  if (error instanceof GmailSendError || error instanceof TelegramSendError) {
     return {
-      code: error.code || "GMAIL_SEND_ERROR",
+      code: error.code || "SEND_ERROR",
       message: error.message,
       retryable: Boolean(error.retryable),
       status: error.status || 0,
@@ -102,6 +113,74 @@ function summarizeError(error) {
     status: 0,
     raw: null,
   };
+}
+
+function normalizeEnabledChannels(settings) {
+  const enabled = settings
+    .filter((setting) => setting.isEnabled && SUPPORTED_CHANNELS.has(setting.channel))
+    .sort((a, b) => a.priorityOrder - b.priorityOrder)
+    .map((setting) => setting.channel);
+
+  return enabled.length ? enabled : [...DEFAULT_CHANNEL_ORDER];
+}
+
+function resolveChannelDestination({ channel, setting, userEmail }) {
+  if (channel === "gmail") {
+    const destination = typeof setting?.destination === "string" ? setting.destination.trim() : "";
+    return destination || userEmail || "";
+  }
+
+  if (channel === "telegram") {
+    const destination = typeof setting?.destination === "string" ? setting.destination.trim() : "";
+    const fallback = typeof process.env.TELEGRAM_DEFAULT_CHAT_ID === "string" ? process.env.TELEGRAM_DEFAULT_CHAT_ID.trim() : "";
+    return destination || fallback;
+  }
+
+  return "";
+}
+
+function buildChannelRequestSnapshot({ channel, destination, content }) {
+  if (channel === "gmail") {
+    return {
+      channel,
+      toEmail: destination,
+      subject: content.subject,
+    };
+  }
+
+  if (channel === "telegram") {
+    return {
+      channel,
+      chatId: destination,
+      text: content.textBody,
+    };
+  }
+
+  return { channel };
+}
+
+async function sendViaChannel({ channel, connectionId, destination, content }) {
+  if (channel === "gmail") {
+    return sendGmailReminder({
+      connectionId,
+      integrationId: "gmail",
+      toEmail: destination,
+      subject: content.subject,
+      textBody: content.textBody,
+      htmlBody: content.htmlBody,
+    });
+  }
+
+  if (channel === "telegram") {
+    return sendTelegramReminder({
+      connectionId,
+      integrationId: "telegram",
+      chatId: destination,
+      text: content.textBody,
+    });
+  }
+
+  throw new Error(`Unsupported channel '${channel}'.`);
 }
 
 async function loadLockedJobs(db, { userId = null, dueBefore, limit, includeFuture = false }) {
@@ -139,17 +218,40 @@ async function loadLockedJobs(db, { userId = null, dueBefore, limit, includeFutu
   return result.rows.map(mapReminderJobRow);
 }
 
-async function insertDeliveryLog(db, {
-  job,
-  attemptNo,
-  connectionId = "",
-  isSuccess,
-  requestPayload = null,
-  responsePayload = null,
-  errorCode = "",
-  errorMessage = "",
-  durationMs = null,
-}) {
+async function loadUserDispatchContext(db, userId) {
+  await ensureDefaultNotificationChannelSettings(db, userId);
+
+  const [settings, connections] = await Promise.all([
+    listNotificationChannelSettingsByUser(db, userId),
+    listIntegrationConnectionsByUser(db, userId),
+  ]);
+
+  const settingMap = new Map(settings.map((item) => [item.channel, item]));
+  const connectionMap = new Map(connections.map((item) => [item.integrationId, item]));
+
+  return {
+    settings,
+    settingMap,
+    connectionMap,
+  };
+}
+
+async function insertDeliveryLog(
+  db,
+  {
+    job,
+    integrationId,
+    deliveryProvider,
+    attemptNo,
+    connectionId = "",
+    isSuccess,
+    requestPayload = null,
+    responsePayload = null,
+    errorCode = "",
+    errorMessage = "",
+    durationMs = null,
+  }
+) {
   await db.query(
     `
       INSERT INTO reminder_deliveries (
@@ -184,8 +286,8 @@ async function insertDeliveryLog(db, {
     [
       job.id,
       job.userId,
-      job.integrationId,
-      DELIVERY_PROVIDER,
+      integrationId,
+      deliveryProvider,
       connectionId || null,
       attemptNo,
       isSuccess,
@@ -211,87 +313,62 @@ async function markReminderAsCanceled(db, { job, reason }) {
   );
 }
 
-async function markReminderAsSent(db, { job, connectionId, externalMessageId }) {
+async function markReminderAsSent(db, { job, integrationId, connectionId, deliveryProvider, externalMessageId }) {
   await db.query(
     `
       UPDATE reminder_jobs
-      SET status = 'sent',
+      SET integration_id = $2,
+          status = 'sent',
           sent_at = NOW(),
-          connection_id = $2,
-          delivery_provider = $3,
-          external_message_id = $4,
+          connection_id = $3,
+          delivery_provider = $4,
+          external_message_id = $5,
           last_error = NULL,
           updated_at = NOW()
       WHERE id = $1::uuid
     `,
-    [job.id, connectionId, DELIVERY_PROVIDER, externalMessageId || null]
+    [job.id, integrationId, connectionId, deliveryProvider, externalMessageId || null]
   );
 }
 
-async function markReminderAsRetry(db, { job, connectionId, nextSendAt, errorMessage }) {
+async function markReminderAsRetry(db, { job, integrationId, connectionId, deliveryProvider, nextSendAt, errorMessage }) {
   await db.query(
     `
       UPDATE reminder_jobs
-      SET status = 'pending',
+      SET integration_id = $2,
+          status = 'pending',
           retry_count = retry_count + 1,
-          send_at = $2::timestamptz,
+          send_at = $3::timestamptz,
+          connection_id = $4,
+          delivery_provider = $5,
+          last_error = $6,
+          updated_at = NOW()
+      WHERE id = $1::uuid
+    `,
+    [job.id, integrationId, nextSendAt.toISOString(), connectionId || null, deliveryProvider, errorMessage]
+  );
+}
+
+async function markReminderAsFailed(db, { job, integrationId, connectionId, deliveryProvider, errorMessage }) {
+  await db.query(
+    `
+      UPDATE reminder_jobs
+      SET integration_id = $2,
+          status = 'failed',
+          retry_count = retry_count + 1,
           connection_id = $3,
           delivery_provider = $4,
           last_error = $5,
           updated_at = NOW()
       WHERE id = $1::uuid
     `,
-    [job.id, nextSendAt.toISOString(), connectionId || null, DELIVERY_PROVIDER, errorMessage]
+    [job.id, integrationId, connectionId || null, deliveryProvider, errorMessage]
   );
-}
-
-async function markReminderAsFailed(db, { job, connectionId, errorMessage }) {
-  await db.query(
-    `
-      UPDATE reminder_jobs
-      SET status = 'failed',
-          retry_count = retry_count + 1,
-          connection_id = $2,
-          delivery_provider = $3,
-          last_error = $4,
-          updated_at = NOW()
-      WHERE id = $1::uuid
-    `,
-    [job.id, connectionId || null, DELIVERY_PROVIDER, errorMessage]
-  );
-}
-
-async function handleUnsupportedIntegration(db, job, nowMs) {
-  const message = `Unsupported integration '${job.integrationId}' for reminder worker.`;
-  await markReminderAsFailed(db, {
-    job,
-    connectionId: "",
-    errorMessage: message,
-  });
-
-  await insertDeliveryLog(db, {
-    job,
-    attemptNo: job.retryCount + 1,
-    connectionId: "",
-    isSuccess: false,
-    requestPayload: {
-      integrationId: job.integrationId,
-    },
-    responsePayload: null,
-    errorCode: "UNSUPPORTED_INTEGRATION",
-    errorMessage: message,
-    durationMs: Date.now() - nowMs,
-  });
-
-  return {
-    jobId: job.id,
-    status: "failed",
-    reason: message,
-  };
 }
 
 async function processReminderJob(db, job) {
   const startedAt = Date.now();
+  const attemptNo = job.retryCount + 1;
 
   if (job.task.status === "done") {
     const reason = "Task already done before reminder dispatch.";
@@ -299,7 +376,9 @@ async function processReminderJob(db, job) {
 
     await insertDeliveryLog(db, {
       job,
-      attemptNo: job.retryCount + 1,
+      integrationId: job.integrationId,
+      deliveryProvider: "nango-reminder",
+      attemptNo,
       connectionId: "",
       isSuccess: false,
       requestPayload: {
@@ -318,30 +397,28 @@ async function processReminderJob(db, job) {
     };
   }
 
-  if (job.integrationId !== DEFAULT_INTEGRATION_ID) {
-    return handleUnsupportedIntegration(db, job, startedAt);
-  }
-
-  const connection = await getIntegrationConnectionByUser(db, job.userId, DEFAULT_INTEGRATION_ID);
-  if (!connection || connection.status !== "active" || !connection.connectionId) {
-    const reason = "No active Gmail connection for this user.";
-
+  const context = await loadUserDispatchContext(db, job.userId);
+  const channels = normalizeEnabledChannels(context.settings);
+  if (!channels.length) {
+    const reason = "No enabled notification channels.";
     await markReminderAsFailed(db, {
       job,
-      connectionId: connection?.connectionId || "",
+      integrationId: job.integrationId,
+      connectionId: "",
+      deliveryProvider: "nango-reminder",
       errorMessage: reason,
     });
 
     await insertDeliveryLog(db, {
       job,
-      attemptNo: job.retryCount + 1,
-      connectionId: connection?.connectionId || "",
+      integrationId: job.integrationId,
+      deliveryProvider: "nango-reminder",
+      attemptNo,
+      connectionId: "",
       isSuccess: false,
-      requestPayload: {
-        integrationId: DEFAULT_INTEGRATION_ID,
-      },
+      requestPayload: null,
       responsePayload: null,
-      errorCode: "MISSING_CONNECTION",
+      errorCode: "NO_ENABLED_CHANNELS",
       errorMessage: reason,
       durationMs: Date.now() - startedAt,
     });
@@ -350,6 +427,7 @@ async function processReminderJob(db, job) {
       jobId: job.id,
       status: "failed",
       reason,
+      errorCode: "NO_ENABLED_CHANNELS",
     };
   }
 
@@ -363,64 +441,116 @@ async function processReminderJob(db, job) {
     leadMinutes: job.leadMinutes,
   });
 
-  const requestSnapshot = {
-    toEmail: job.user.email,
-    subject: content.subject,
-    integrationId: DEFAULT_INTEGRATION_ID,
-  };
+  const hardFailures = [];
 
-  try {
-    const sendResult = await sendGmailReminder({
-      connectionId: connection.connectionId,
-      integrationId: DEFAULT_INTEGRATION_ID,
-      toEmail: job.user.email,
-      subject: content.subject,
-      textBody: content.textBody,
-      htmlBody: content.htmlBody,
-    });
+  for (const channel of channels) {
+    const deliveryProvider = DELIVERY_PROVIDER_BY_CHANNEL[channel] || `nango-${channel}`;
+    const connection = context.connectionMap.get(channel) || null;
+    const setting = context.settingMap.get(channel) || null;
 
-    await markReminderAsSent(db, {
-      job,
-      connectionId: connection.connectionId,
-      externalMessageId: sendResult.externalMessageId,
-    });
+    if (!connection || connection.status !== "active" || !connection.connectionId) {
+      const reason = `No active ${channel} connection for this user.`;
+      hardFailures.push({ channel, reason, errorCode: "MISSING_CONNECTION" });
 
-    await insertDeliveryLog(db, {
-      job,
-      attemptNo: job.retryCount + 1,
-      connectionId: connection.connectionId,
-      isSuccess: true,
-      requestPayload: requestSnapshot,
-      responsePayload: sendResult.response || null,
-      errorCode: "",
-      errorMessage: "",
-      durationMs: Date.now() - startedAt,
-    });
-
-    return {
-      jobId: job.id,
-      status: "sent",
-      messageId: sendResult.externalMessageId || "",
-    };
-  } catch (error) {
-    const normalizedError = summarizeError(error);
-    const willRetry = shouldRetryReminder({
-      retryCount: job.retryCount,
-      retryableError: normalizedError.retryable,
-    });
-
-    if (willRetry) {
-      const nextRetryAt = getNextRetryAt({ retryCount: job.retryCount, now: new Date() });
-      await markReminderAsRetry(db, {
+      await insertDeliveryLog(db, {
         job,
+        integrationId: channel,
+        deliveryProvider,
+        attemptNo,
+        connectionId: connection?.connectionId || "",
+        isSuccess: false,
+        requestPayload: { channel },
+        responsePayload: null,
+        errorCode: "MISSING_CONNECTION",
+        errorMessage: reason,
+        durationMs: Date.now() - startedAt,
+      });
+      continue;
+    }
+
+    const destination = resolveChannelDestination({
+      channel,
+      setting,
+      userEmail: job.user.email,
+    });
+
+    if (!destination) {
+      const reason =
+        channel === "telegram"
+          ? "Missing Telegram destination chat id in channel settings."
+          : "Missing destination for notification channel.";
+      hardFailures.push({ channel, reason, errorCode: "MISSING_DESTINATION" });
+
+      await insertDeliveryLog(db, {
+        job,
+        integrationId: channel,
+        deliveryProvider,
+        attemptNo,
         connectionId: connection.connectionId,
-        nextSendAt: nextRetryAt,
-        errorMessage: normalizedError.message,
+        isSuccess: false,
+        requestPayload: { channel },
+        responsePayload: null,
+        errorCode: "MISSING_DESTINATION",
+        errorMessage: reason,
+        durationMs: Date.now() - startedAt,
+      });
+      continue;
+    }
+
+    const requestSnapshot = buildChannelRequestSnapshot({
+      channel,
+      destination,
+      content,
+    });
+
+    try {
+      const sendResult = await sendViaChannel({
+        channel,
+        connectionId: connection.connectionId,
+        destination,
+        content,
+      });
+
+      await markReminderAsSent(db, {
+        job,
+        integrationId: channel,
+        connectionId: connection.connectionId,
+        deliveryProvider,
+        externalMessageId: sendResult.externalMessageId,
       });
 
       await insertDeliveryLog(db, {
         job,
-        attemptNo: job.retryCount + 1,
+        integrationId: channel,
+        deliveryProvider,
+        attemptNo,
+        connectionId: connection.connectionId,
+        isSuccess: true,
+        requestPayload: requestSnapshot,
+        responsePayload: sendResult.response || null,
+        errorCode: "",
+        errorMessage: "",
+        durationMs: Date.now() - startedAt,
+      });
+
+      return {
+        jobId: job.id,
+        status: "sent",
+        channel,
+        messageId: sendResult.externalMessageId || "",
+      };
+    } catch (error) {
+      const normalizedError = summarizeError(error);
+      const canRetry = shouldRetryReminder({
+        retryCount: job.retryCount,
+        retryableError: normalizedError.retryable,
+      });
+
+      await insertDeliveryLog(db, {
+        job,
+        integrationId: channel,
+        deliveryProvider,
+        attemptNo,
         connectionId: connection.connectionId,
         isSuccess: false,
         requestPayload: requestSnapshot,
@@ -430,39 +560,55 @@ async function processReminderJob(db, job) {
         durationMs: Date.now() - startedAt,
       });
 
-      return {
-        jobId: job.id,
-        status: "retry_scheduled",
-        errorCode: normalizedError.code,
-        nextRetryAt: nextRetryAt.toISOString(),
-      };
+      if (canRetry) {
+        const nextRetryAt = getNextRetryAt({ retryCount: job.retryCount, now: new Date() });
+        await markReminderAsRetry(db, {
+          job,
+          integrationId: channel,
+          connectionId: connection.connectionId,
+          deliveryProvider,
+          nextSendAt: nextRetryAt,
+          errorMessage: normalizedError.message,
+        });
+
+        return {
+          jobId: job.id,
+          status: "retry_scheduled",
+          channel,
+          errorCode: normalizedError.code,
+          nextRetryAt: nextRetryAt.toISOString(),
+        };
+      }
+
+      hardFailures.push({
+        channel,
+        reason: normalizedError.message,
+        errorCode: normalizedError.code || "SEND_ERROR",
+      });
     }
-
-    await markReminderAsFailed(db, {
-      job,
-      connectionId: connection.connectionId,
-      errorMessage: normalizedError.message,
-    });
-
-    await insertDeliveryLog(db, {
-      job,
-      attemptNo: job.retryCount + 1,
-      connectionId: connection.connectionId,
-      isSuccess: false,
-      requestPayload: requestSnapshot,
-      responsePayload: normalizedError.raw,
-      errorCode: normalizedError.code,
-      errorMessage: normalizedError.message,
-      durationMs: Date.now() - startedAt,
-    });
-
-    return {
-      jobId: job.id,
-      status: "failed",
-      errorCode: normalizedError.code,
-      reason: normalizedError.message,
-    };
   }
+
+  const finalFailure = hardFailures[hardFailures.length - 1] || {
+    channel: job.integrationId,
+    reason: "No channel could deliver this reminder.",
+    errorCode: "NO_CHANNEL_DELIVERED",
+  };
+
+  await markReminderAsFailed(db, {
+    job,
+    integrationId: finalFailure.channel,
+    connectionId: "",
+    deliveryProvider: DELIVERY_PROVIDER_BY_CHANNEL[finalFailure.channel] || "nango-reminder",
+    errorMessage: finalFailure.reason,
+  });
+
+  return {
+    jobId: job.id,
+    status: "failed",
+    channel: finalFailure.channel,
+    reason: finalFailure.reason,
+    errorCode: finalFailure.errorCode,
+  };
 }
 
 export async function dispatchReminderJobs({ userId = null, limit = DEFAULT_BATCH_SIZE, includeFuture = false } = {}) {

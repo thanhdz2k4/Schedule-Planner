@@ -1,27 +1,45 @@
-const GMAIL_PUBLIC_ID = "gmail";
+const INTEGRATION_CONFIG = {
+  gmail: {
+    id: "gmail",
+    label: "Gmail",
+    provider: "google-mail",
+    envVarName: "NANGO_INTEGRATION_GMAIL",
+  },
+  telegram: {
+    id: "telegram",
+    label: "Telegram",
+    provider: "telegram",
+    envVarName: "NANGO_INTEGRATION_TELEGRAM",
+  },
+};
 
-function readGmailProviderConfigKey() {
-  const raw = process.env.NANGO_INTEGRATION_GMAIL;
+export const SUPPORTED_INTEGRATIONS = Object.values(INTEGRATION_CONFIG).map((item) => ({
+  id: item.id,
+  label: item.label,
+  provider: item.provider,
+}));
+
+const SUPPORTED_INTEGRATION_IDS = new Set(Object.keys(INTEGRATION_CONFIG));
+
+function readTrimmedEnv(name) {
+  const raw = process.env[name];
   if (typeof raw !== "string") {
     return "";
   }
 
-  const trimmed = raw.trim();
-  return trimmed;
+  return raw.trim();
 }
-
-export const SUPPORTED_INTEGRATIONS = [
-  {
-    id: GMAIL_PUBLIC_ID,
-    label: "Gmail",
-    provider: "google-mail",
-  },
-];
-
-const SUPPORTED_INTEGRATION_IDS = new Set(SUPPORTED_INTEGRATIONS.map((integration) => integration.id));
 
 export function isSupportedIntegrationId(value) {
   return typeof value === "string" && SUPPORTED_INTEGRATION_IDS.has(value.trim());
+}
+
+export function getIntegrationEnvVarName(publicIntegrationId) {
+  if (!isSupportedIntegrationId(publicIntegrationId)) {
+    return "";
+  }
+
+  return INTEGRATION_CONFIG[publicIntegrationId.trim()].envVarName;
 }
 
 export function resolveProviderConfigKey(publicIntegrationId) {
@@ -29,11 +47,8 @@ export function resolveProviderConfigKey(publicIntegrationId) {
     return "";
   }
 
-  if (publicIntegrationId.trim() === GMAIL_PUBLIC_ID) {
-    return readGmailProviderConfigKey();
-  }
-
-  return "";
+  const integration = INTEGRATION_CONFIG[publicIntegrationId.trim()];
+  return readTrimmedEnv(integration.envVarName);
 }
 
 export function resolvePublicIntegrationIdByProviderConfigKey(providerConfigKey) {
@@ -46,9 +61,11 @@ export function resolvePublicIntegrationIdByProviderConfigKey(providerConfigKey)
     return "";
   }
 
-  const gmailProviderConfigKey = readGmailProviderConfigKey();
-  if (trimmed === gmailProviderConfigKey || trimmed === GMAIL_PUBLIC_ID) {
-    return GMAIL_PUBLIC_ID;
+  for (const integration of Object.values(INTEGRATION_CONFIG)) {
+    const providerConfig = readTrimmedEnv(integration.envVarName);
+    if (trimmed === providerConfig || trimmed === integration.id) {
+      return integration.id;
+    }
   }
 
   return "";

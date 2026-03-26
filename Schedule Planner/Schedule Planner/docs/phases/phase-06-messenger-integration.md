@@ -1,112 +1,126 @@
-# Phase 6 - Multi-platform Notification Expansion (Nango)
+﻿# Phase 6 - Telegram Reminder Channel (via Nango)
 
 ## 1. Muc tieu
 
-- Mo rong tu Gmail sang nhieu kenh thong bao khac qua cung mot abstraction.
-- Tach logic kenh (provider-specific) khoi reminder worker.
-- Cho phep user cau hinh kenh uu tien va fallback.
+- Mo rong reminder tu Gmail sang Telegram qua Nango.
+- Ho tro fallback channel theo uu tien (Telegram -> Gmail).
+- Cho phep user cau hinh Telegram chat id theo tung tai khoan.
 
 ## 2. Pham vi
 
 Trong phase nay lam:
 
-- Thiet ke notification channel abstraction.
-- Them kenh thu 2 (goi y: Slack hoac Teams) qua Nango.
-- Implement fallback strategy `primary -> secondary`.
+- Them integration Telegram vao Connect flow (Nango).
+- Them channel settings API/UI de luu destination (Telegram chat id), enable/disable, priority.
+- Worker dispatch reminder theo thu tu channel settings.
 
 Chua lam:
 
-- AI tu dong chon kenh (Phase 8).
+- Tu dong AI chon channel theo context (Phase 8).
+- Rule quiet hours phuc tap.
 
-## 3. Kien truc de xuat
+## 3. Kien truc da ap dung
 
 ```text
 Reminder Worker
-  -> Channel Orchestrator
-      -> Gmail Adapter (Nango)
-      -> Slack Adapter (Nango)
-      -> Teams Adapter (future)
+  -> Load notification_channel_settings
+  -> Try Telegram adapter (Nango Proxy)
+  -> Fallback Gmail adapter (Nango Proxy)
+  -> Log reminder_deliveries per attempt
 ```
 
-Contract chung:
+## 4. Bien moi truong can co
 
-```ts
-sendReminder(channel, payload): Promise<DeliveryResult>
+```env
+NANGO_INTEGRATION_GMAIL=
+NANGO_INTEGRATION_TELEGRAM=
+NANGO_TELEGRAM_SEND_PATH=/proxy/sendMessage
+TELEGRAM_DEFAULT_CHAT_ID=
 ```
 
-## 4. Mo hinh du lieu bo sung
+Ghi chu:
+
+- `NANGO_INTEGRATION_TELEGRAM`: provider config key Telegram trong Nango.
+- `NANGO_TELEGRAM_SEND_PATH`: endpoint proxy cho Telegram send message.
+- `TELEGRAM_DEFAULT_CHAT_ID`: fallback chat id neu user chua set destination rieng.
+
+## 5. DB bo sung
+
+- `007_notification_channel_settings_phase6.sql`
 
 Bang `notification_channel_settings`:
 
 - `user_id`
-- `channel` (`gmail`, `slack`, `teams`)
-- `integration_id`
-- `connection_id`
+- `channel` (`telegram`, `gmail`)
 - `is_enabled`
 - `priority_order`
-- `quiet_hours_config` (jsonb)
+- `destination` (Telegram chat id hoac destination override)
 
-Bang `reminder_delivery_attempts`:
-
-- `job_id`
-- `channel`
-- `attempt_no`
-- `status`
-- `error_code`
-- `error_message`
-- `sent_at`
-
-## 5. Quy tac fallback de xuat
-
-1. Lay danh sach channel enable theo `priority_order`.
-2. Thu channel dau tien.
-3. Neu fail voi loi co the retry -> retry tai channel do.
-4. Neu loi hard fail (auth/permission) -> chuyen channel tiep theo.
-5. Neu het channel -> job `failed`.
-
-## 6. API/UX can co
+## 6. API phase 6
 
 - `GET /api/notification/channels`
+  - Lay setting channel + trang thai ket noi.
 - `PUT /api/notification/channels`
-- `POST /api/notification/channels/{channel}/connect-session`
-- `POST /api/notification/channels/reconnect-session`
+  - Cap nhat enable/priority/destination.
+- `POST /api/integrations/telegram/test-send`
+  - Gui test message Telegram.
 
-UI:
+## 7. UI phase 6
 
-- Trang "Integrations":
-  - Hien trang thai ket noi tung kenh.
-  - Nut Connect / Reconnect / Disable.
-  - Keo-tha thu tu uu tien kenh.
+Trang `Integrations`:
 
-## 7. Checklist trien khai
+- Co card Telegram (icon, connect/reconnect).
+- Co input `chat id` + nut save destination.
+- Co nut `Send test message`.
 
-1. Tach `gmailSender` thanh adapter pattern.
-2. Tao interface chung cho moi channel adapter.
-3. Them 1 adapter moi (Slack/Teams) qua Nango.
-4. Them orchestration fallback.
-5. Update worker de goi orchestrator thay vi goi truc tiep Gmail.
-6. Them integration settings UI/API.
+## 8. Worker fallback
 
-## 8. Bao mat va van hanh
+Thu tu xu ly:
 
-- Kiem tra connection validity dinh ky.
-- Neu connection invalid: danh dau status `error`, canh bao reconnect.
-- Khong luu token provider trong app DB (chi luu metadata connection).
+1. Lay danh sach channel dang enable sap theo `priority_order`.
+2. Thu channel dau tien.
+3. Neu loi retryable -> schedule retry cho channel do.
+4. Neu loi hard fail (missing connection/destination/auth) -> thu channel tiep theo.
+5. Neu het channel -> danh dau `failed`.
 
-## 9. Kiem thu toi thieu
+## 9. Checklist kiem thu
 
-- User co 2 kenh active, kenh 1 fail -> kenh 2 send thanh cong.
-- User tat kenh 1 -> worker chi gui kenh 2.
-- Reconnect flow khac phuc duoc connection invalid.
+- Telegram connected + chat id hop le -> nhan tin nhac lich.
+- Telegram fail hard -> worker fallback qua Gmail.
+- Tat Telegram channel -> worker bo qua Telegram.
+- Reconnect Telegram -> test-send thanh cong.
 
 ## 10. Tieu chi hoan thanh
 
-- Reminder worker gui duoc qua it nhat 2 kenh.
-- Fallback hoat dong dung theo policy.
-- User cau hinh duoc thu tu kenh tu UI/API.
+- Agent Lab/Worker gui reminder duoc qua Telegram khi user da connect.
+- Fallback Telegram -> Gmail chay dung.
+- User quan ly duoc destination + priority tren UI/API.
 
-## 11. Output can nop
+## 11. Phase tiep theo de di den OpenClaw assistant
 
-- Demo video fallback 2 kenh.
-- Log delivery attempts theo tung channel.
-- Screenshot trang Integrations voi status ket noi.
+- Phase 7: Chat Bridge Telegram <-> Agent Lab.
+- Phase 8: Personal Memory Engine.
+- Phase 9: Personal Knowledge Vault (RAG).
+- Phase 10: Proactive Planner & Auto-Execution.
+- Phase 11: Tool Runtime & Multi-App Automation.
+- Phase 12: Voice & Multimodal Assistant.
+- Phase 13: OpenClaw Readiness.
+
+Xem chi tiet trong `docs/phases/README.md`.
+
+## 12. Mo rong roadmap (tom tat theo kha nang)
+
+1. Phase 7 - Chat Bridge:
+   Telegram tro thanh kenh chat truc tiep voi assistant.
+2. Phase 8 - Personal Memory:
+   Assistant nho so thich, thoi quen, context theo tung user.
+3. Phase 9 - Knowledge Vault:
+   Nap tri thuc ca nhan va tra loi co citation.
+4. Phase 10 - Proactive Planner:
+   Tu de xuat ke hoach va nhac viec chu dong.
+5. Phase 11 - Tool Runtime:
+   Chay workflow da cong cu qua Nango/tool adapter.
+6. Phase 12 - Voice & Multimodal:
+   Nhap voice, document, image va phan hoi da kenh.
+7. Phase 13 - OpenClaw Readiness:
+   Hardening security/privacy/ops de san sang production.

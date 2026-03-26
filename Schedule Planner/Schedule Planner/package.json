@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@nangohq/frontend": "^0.69.46",
     "next": "15.3.1",
     "pg": "^8.20.0",
     "react": "19.1.0",

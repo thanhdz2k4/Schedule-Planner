@@ -1,4 +1,5 @@
 import { BusinessError } from "@/lib/agent/workflow-engine/errors";
+import { DEFAULT_INTEGRATION_ID, normalizeLeadMinutes } from "@/lib/reminder/scheduler";
 
 function toDateString(value) {
   if (!value) return null;
@@ -241,6 +242,7 @@ export async function upsertReminderJob({ db, userId, taskId, date, start, minut
     });
   }
 
+  const leadMinutes = normalizeLeadMinutes(minutesBefore);
   const timezone = await loadUserTimezone(db, userId);
 
   await db.query(
@@ -255,24 +257,34 @@ export async function upsertReminderJob({ db, userId, taskId, date, start, minut
 
   const result = await db.query(
     `
-      INSERT INTO reminder_jobs (user_id, task_id, send_at, status, retry_count)
-      VALUES (
-        $1::uuid,
-        $2::uuid,
-        ((($3::date + $4::time) AT TIME ZONE $5) - make_interval(mins => $6::int)),
-        'pending',
-        0
+      INSERT INTO reminder_jobs (
+        user_id,
+        task_id,
+        integration_id,
+        send_at,
+        status,
+        retry_count,
+        lead_minutes
       )
-      RETURNING id, send_at, status
+        VALUES (
+          $1::uuid,
+          $2::uuid,
+          $3,
+          ((($4::date + $5::time) AT TIME ZONE $6) - make_interval(mins => $7::int)),
+          'pending',
+          0,
+          $7::int
+        )
+      RETURNING id, send_at, status, lead_minutes
     `,
-    [userId, taskId, date, start, timezone, minutesBefore]
+    [userId, taskId, DEFAULT_INTEGRATION_ID, date, start, timezone, leadMinutes]
   );
 
   return {
     id: result.rows[0].id,
     send_at: result.rows[0].send_at,
     status: result.rows[0].status,
-    minutes_before: minutesBefore,
+    minutes_before: result.rows[0].lead_minutes,
   };
 }
 

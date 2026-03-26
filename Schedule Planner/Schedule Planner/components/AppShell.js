@@ -30,7 +30,17 @@ async function safeJson(response) {
   }
 }
 
-export default function AppShell({ title, subtitle, quote, goalProgress, themeLabel, onToggleTheme, children }) {
+export default function AppShell({
+  title,
+  subtitle,
+  quote,
+  goalProgress,
+  themeLabel,
+  onToggleTheme,
+  children,
+  hideHero = false,
+  mainClassName = "",
+}) {
   const pathname = usePathname();
   const [authSession, setAuthSession] = useState(null);
   const [authMode, setAuthMode] = useState("login");
@@ -192,25 +202,27 @@ export default function AppShell({ title, subtitle, quote, goalProgress, themeLa
         </section>
       </aside>
 
-      <main className="main">
-        <header className="hero">
-          <div className="hero-section">
-            <p className="muted hero-kicker">Schedule Planner</p>
-            <h2>{title}</h2>
-            <p className="muted hero-sub">{subtitle}</p>
-          </div>
-          <div className="hero-center hero-section">
-            <h3>Lịch tuần</h3>
-            <p className="hero-meta">{todayText}</p>
-          </div>
-          <div className="hero-right hero-section">
-            <p className="muted">Trích dẫn</p>
-            <p className="quote">{quote || "Small progress every day."}</p>
-            <button className="btn ghost theme-toggle" onClick={onToggleTheme}>
-              {themeLabel}
-            </button>
-          </div>
-        </header>
+      <main className={`main${mainClassName ? ` ${mainClassName}` : ""}`}>
+        {!hideHero ? (
+          <header className="hero">
+            <div className="hero-section">
+              <p className="muted hero-kicker">Schedule Planner</p>
+              <h2>{title}</h2>
+              <p className="muted hero-sub">{subtitle}</p>
+            </div>
+            <div className="hero-center hero-section">
+              <h3>Lịch tuần</h3>
+              <p className="hero-meta">{todayText}</p>
+            </div>
+            <div className="hero-right hero-section">
+              <p className="muted">Trích dẫn</p>
+              <p className="quote">{quote || "Small progress every day."}</p>
+              <button className="btn ghost theme-toggle" onClick={onToggleTheme}>
+                {themeLabel}
+              </button>
+            </div>
+          </header>
+        ) : null}
 
         {children}
       </main>

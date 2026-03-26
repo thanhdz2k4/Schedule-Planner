@@ -6,16 +6,172 @@ import { usePlannerData } from "@/hooks/usePlannerData";
 import { loadAuthSession } from "@/lib/authClient";
 import { daysRemaining, formatDate, priorityLabel, statusLabel } from "@/lib/plannerStore";
 
+async function safeJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
+function normalizeLeadValue(value, fallback = "") {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return String(parsed);
+}
+
+function formatLeadPreview(seconds) {
+  if (!Number.isInteger(seconds) || seconds < 0) {
+    return "";
+  }
+
+  if (seconds === 0) {
+    return "0 seconds";
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+
+  if (minutes > 0 && remainder > 0) {
+    return `${minutes} minute(s) ${remainder} second(s)`;
+  }
+  if (minutes > 0) {
+    return `${minutes} minute(s)`;
+  }
+  return `${remainder} second(s)`;
+}
+
 export default function RemindersPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
   const [authSession, setAuthSession] = useState(null);
   const [dispatchBusy, setDispatchBusy] = useState(false);
   const [dispatchMessage, setDispatchMessage] = useState("");
   const [dispatchError, setDispatchError] = useState("");
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsMessage, setSettingsMessage] = useState("");
+  const [leadUnit, setLeadUnit] = useState("minutes");
+  const [leadValue, setLeadValue] = useState("5");
+  const [effectiveLeadSeconds, setEffectiveLeadSeconds] = useState(300);
 
   useEffect(() => {
-    setAuthSession(loadAuthSession());
+    const session = loadAuthSession();
+    setAuthSession(session);
+
+    if (!session?.token) {
+      return;
+    }
+
+    let cancelled = false;
+    async function loadReminderSettings() {
+      setSettingsLoading(true);
+      setSettingsError("");
+      setSettingsMessage("");
+
+      try {
+        const response = await fetch("/api/reminders/settings", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${session.token}`,
+          },
+        });
+
+        const payload = await safeJson(response);
+        if (!response.ok) {
+          if (!cancelled) {
+            setSettingsError(payload?.message || "Cannot load reminder settings.");
+          }
+          return;
+        }
+
+        const setting = payload?.setting || {};
+        const unit = setting?.display?.unit === "seconds" ? "seconds" : "minutes";
+        const value = normalizeLeadValue(setting?.display?.value, unit === "seconds" ? "300" : "5");
+        const leadSeconds = Number.parseInt(setting?.leadSeconds, 10);
+
+        if (!cancelled) {
+          setLeadUnit(unit);
+          setLeadValue(value);
+          setEffectiveLeadSeconds(Number.isInteger(leadSeconds) && leadSeconds >= 0 ? leadSeconds : 300);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setSettingsError("Unexpected error while loading reminder settings.");
+        }
+      } finally {
+        if (!cancelled) {
+          setSettingsLoading(false);
+        }
+      }
+    }
+
+    loadReminderSettings();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  async function handleSaveReminderSetting() {
+    if (!authSession?.token) {
+      setSettingsError("Please login first before updating reminder settings.");
+      setSettingsMessage("");
+      return;
+    }
+
+    const parsed = Number.parseInt(leadValue, 10);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      setSettingsError("Lead time must be an integer >= 0.");
+      setSettingsMessage("");
+      return;
+    }
+
+    setSettingsSaving(true);
+    setSettingsError("");
+    setSettingsMessage("");
+
+    try {
+      const response = await fetch("/api/reminders/settings", {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${authSession.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          value: parsed,
+          unit: leadUnit,
+        }),
+      });
+
+      const payload = await safeJson(response);
+      if (!response.ok) {
+        setSettingsError(payload?.message || "Cannot save reminder settings.");
+        return;
+      }
+
+      const leadSeconds = Number.parseInt(payload?.setting?.leadSeconds, 10);
+      const nextLeadSeconds = Number.isInteger(leadSeconds) && leadSeconds >= 0 ? leadSeconds : 300;
+
+      const display = payload?.setting?.display || {};
+      const nextUnit = display?.unit === "seconds" ? "seconds" : "minutes";
+      const nextValue = normalizeLeadValue(display?.value, nextUnit === "seconds" ? "300" : "5");
+
+      setLeadUnit(nextUnit);
+      setLeadValue(nextValue);
+      setEffectiveLeadSeconds(nextLeadSeconds);
+      setSettingsMessage(
+        `Reminder setting saved. Applied to ${payload?.jobsRebuilt || 0} pending reminder job(s).`
+      );
+    } catch (error) {
+      console.error(error);
+      setSettingsError("Unexpected error while saving reminder settings.");
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
 
   async function handleDispatchNow() {
     if (!authSession?.token) {
@@ -80,6 +236,45 @@ export default function RemindersPage() {
       themeLabel={darkMode ? "Che do sang" : "Che do toi"}
       onToggleTheme={actions.toggleTheme}
     >
+      <section className="panel">
+        <div className="panel-head">
+          <h3>Reminder Lead Time</h3>
+        </div>
+        <div className="mini-card">
+          <p className="muted">Set how long before task start the reminder should be sent.</p>
+          <div className="grid-form">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={leadValue}
+              onChange={(event) => setLeadValue(event.target.value)}
+              placeholder={leadUnit === "seconds" ? "Seconds" : "Minutes"}
+              disabled={settingsLoading || settingsSaving}
+            />
+            <select
+              value={leadUnit}
+              onChange={(event) => setLeadUnit(event.target.value === "seconds" ? "seconds" : "minutes")}
+              disabled={settingsLoading || settingsSaving}
+            >
+              <option value="minutes">Minutes</option>
+              <option value="seconds">Seconds</option>
+            </select>
+            <button
+              type="button"
+              className="btn"
+              onClick={handleSaveReminderSetting}
+              disabled={settingsLoading || settingsSaving}
+            >
+              {settingsSaving ? "Saving..." : "Save Reminder Setting"}
+            </button>
+          </div>
+          <p className="muted">
+            Current effective lead time: {formatLeadPreview(effectiveLeadSeconds) || "Not set yet"}.
+          </p>
+        </div>
+      </section>
+
       <section className="panel two-col">
         <article>
           <div className="panel-head">
@@ -134,6 +329,8 @@ export default function RemindersPage() {
         </article>
       </section>
 
+      {settingsError ? <p className="alert">{settingsError}</p> : null}
+      {!settingsError && settingsMessage ? <p className="integration-success">{settingsMessage}</p> : null}
       {dispatchError ? <p className="alert">{dispatchError}</p> : null}
       {!dispatchError && dispatchMessage ? <p className="integration-success">{dispatchMessage}</p> : null}
     </AppShell>

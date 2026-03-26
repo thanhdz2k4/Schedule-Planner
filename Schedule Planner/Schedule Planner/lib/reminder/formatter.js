@@ -1,4 +1,4 @@
-﻿import { DEFAULT_REMINDER_LEAD_MINUTES } from "@/lib/reminder/scheduler";
+import { DEFAULT_REMINDER_LEAD_SECONDS, normalizeLeadSeconds } from "@/lib/reminder/scheduler";
 
 function toDateString(value) {
   if (!value) {
@@ -32,6 +32,29 @@ function toTimeString(value) {
   return "";
 }
 
+function formatLeadTimeText(totalSeconds) {
+  if (!Number.isInteger(totalSeconds) || totalSeconds < 0) {
+    return "5 phut";
+  }
+
+  if (totalSeconds === 0) {
+    return "0 giay";
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes > 0 && seconds > 0) {
+    return `${minutes} phut ${seconds} giay`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes} phut`;
+  }
+
+  return `${seconds} giay`;
+}
+
 export function formatReminderWindow({ date, start, end, timezone }) {
   const dateText = toDateString(date);
   const startText = toTimeString(start);
@@ -47,20 +70,22 @@ export function buildReminderEmailContent({
   end,
   priority,
   timezone,
-  leadMinutes = DEFAULT_REMINDER_LEAD_MINUTES,
+  leadSeconds = DEFAULT_REMINDER_LEAD_SECONDS,
 }) {
   const safeTaskTitle = typeof taskTitle === "string" && taskTitle.trim() ? taskTitle.trim() : "Untitled task";
   const safePriority = typeof priority === "string" && priority.trim() ? priority.trim() : "medium";
-  const safeLeadMinutes = Number.isInteger(leadMinutes) && leadMinutes >= 0 ? leadMinutes : DEFAULT_REMINDER_LEAD_MINUTES;
+  const safeLeadSeconds = normalizeLeadSeconds(leadSeconds, DEFAULT_REMINDER_LEAD_SECONDS);
+  const safeLeadText = formatLeadTimeText(safeLeadSeconds);
   const windowText = formatReminderWindow({ date, start, end, timezone });
 
-  const subject = `[Schedule Planner] Nhac lich: \"${safeTaskTitle}\" bat dau sau ${safeLeadMinutes} phut`;
+  const subject = `[Schedule Planner] Nhac lich: \"${safeTaskTitle}\" bat dau sau ${safeLeadText}`;
   const lines = [
     "Xin chao,",
     "",
     "Ban co lich sap den:",
     `- Task: ${safeTaskTitle}`,
     `- Thoi gian: ${windowText}`,
+    `- Nhac truoc: ${safeLeadText}`,
     `- Uu tien: ${safePriority}`,
     "",
     "Sent by Schedule Planner",
@@ -73,6 +98,7 @@ export function buildReminderEmailContent({
     "<ul>",
     `  <li><strong>Task:</strong> ${safeTaskTitle}</li>`,
     `  <li><strong>Thoi gian:</strong> ${windowText}</li>`,
+    `  <li><strong>Nhac truoc:</strong> ${safeLeadText}</li>`,
     `  <li><strong>Uu tien:</strong> ${safePriority}</li>`,
     "</ul>",
     "<p>Sent by Schedule Planner</p>",

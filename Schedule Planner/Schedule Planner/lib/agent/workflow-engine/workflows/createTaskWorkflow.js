@@ -38,11 +38,12 @@ export const createTaskWorkflow = [
   {
     name: "schedule_reminder",
     run: async (ctx) => {
-      const minutesBefore = ctx.state.createInput.minutes_before;
-      if (!Number.isInteger(minutesBefore)) {
+      if (ctx.state.createdTask.status === "done") {
         ctx.state.reminder = null;
-        return { scheduled: false };
+        return { scheduled: false, reason: "task_already_done" };
       }
+
+      const minutesBefore = ctx.state.createInput.minutes_before;
 
       ctx.state.reminder = await upsertReminderJob({
         db: ctx.db,

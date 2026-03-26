@@ -8,7 +8,7 @@ import {
 import { GmailSendError, sendGmailReminder } from "@/lib/integrations/gmailSender";
 import { sendTelegramReminder, TelegramSendError } from "@/lib/integrations/telegramSender";
 import { buildReminderEmailContent } from "@/lib/reminder/formatter";
-import { DEFAULT_INTEGRATION_ID } from "@/lib/reminder/scheduler";
+import { DEFAULT_INTEGRATION_ID, DEFAULT_REMINDER_LEAD_SECONDS } from "@/lib/reminder/scheduler";
 import { getNextRetryAt, shouldRetryReminder } from "@/lib/reminder/retryPolicy";
 
 const DEFAULT_BATCH_SIZE = 20;
@@ -62,6 +62,18 @@ function toTimeString(value) {
 }
 
 function mapReminderJobRow(row) {
+  const parsedLeadSeconds = Number.isInteger(row.lead_seconds)
+    ? row.lead_seconds
+    : Number.parseInt(row.lead_seconds, 10);
+  const parsedLeadMinutes = Number.isInteger(row.lead_minutes)
+    ? row.lead_minutes
+    : Number.parseInt(row.lead_minutes, 10);
+  const leadSeconds = Number.isInteger(parsedLeadSeconds)
+    ? parsedLeadSeconds
+    : Number.isInteger(parsedLeadMinutes)
+    ? parsedLeadMinutes * 60
+    : DEFAULT_REMINDER_LEAD_SECONDS;
+
   return {
     id: row.id,
     userId: row.user_id,
@@ -69,7 +81,7 @@ function mapReminderJobRow(row) {
     integrationId: row.integration_id || DEFAULT_INTEGRATION_ID,
     sendAt: row.send_at,
     retryCount: Number.isInteger(row.retry_count) ? row.retry_count : Number.parseInt(row.retry_count, 10) || 0,
-    leadMinutes: Number.isInteger(row.lead_minutes) ? row.lead_minutes : Number.parseInt(row.lead_minutes, 10) || 5,
+    leadSeconds,
     task: {
       title: row.task_title,
       date: toDateString(row.task_date),
@@ -193,6 +205,7 @@ async function loadLockedJobs(db, { userId = null, dueBefore, limit, includeFutu
         r.integration_id,
         r.send_at,
         r.retry_count,
+        r.lead_seconds,
         r.lead_minutes,
         t.title AS task_title,
         t.date AS task_date,
@@ -438,7 +451,7 @@ async function processReminderJob(db, job) {
     end: job.task.end,
     priority: job.task.priority,
     timezone: job.user.timezone,
-    leadMinutes: job.leadMinutes,
+    leadSeconds: job.leadSeconds,
   });
 
   const hardFailures = [];

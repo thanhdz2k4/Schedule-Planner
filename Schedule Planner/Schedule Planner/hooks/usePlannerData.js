@@ -279,7 +279,7 @@ export function usePlannerData() {
       addTask(payload) {
         const next = { ...state, tasks: [...state.tasks] };
         if (hasOverlap(next.tasks, payload)) {
-          return { ok: false, message: "Task bi trung gio trong cung ngay." };
+          return { ok: false, message: "Task bị trùng giờ trong cùng ngày." };
         }
 
         next.tasks.push({ id: crypto.randomUUID(), ...payload });
@@ -290,7 +290,7 @@ export function usePlannerData() {
       updateTask(id, payload) {
         const next = { ...state, tasks: [...state.tasks] };
         if (hasOverlap(next.tasks, payload, id)) {
-          return { ok: false, message: "Task bi trung gio trong cung ngay." };
+          return { ok: false, message: "Task bị trùng giờ trong cùng ngày." };
         }
 
         next.tasks = next.tasks.map((task) => (task.id === id ? { ...task, ...payload } : task));
@@ -326,7 +326,7 @@ export function usePlannerData() {
         };
 
         if (hasOverlap(state.tasks, payload, id)) {
-          return { ok: false, message: "Khong the keo vi bi trung gio." };
+          return { ok: false, message: "Không thể kéo vì bị trùng giờ." };
         }
 
         return this.updateTask(id, payload);

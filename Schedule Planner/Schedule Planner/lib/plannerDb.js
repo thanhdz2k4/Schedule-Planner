@@ -1,6 +1,7 @@
 ﻿import { withTransaction } from "@/lib/db/client";
 import { ensureMigrations } from "@/lib/db/migrate";
 import { listGoalsByUser, replaceGoalsForUser } from "@/lib/db/queries/goalQueries";
+import { getReminderLeadSecondsForUser } from "@/lib/db/queries/reminderUserSettingQueries";
 import { listTasksByUser, rebuildReminderJobsForUser, replaceTasksForUser } from "@/lib/db/queries/taskQueries";
 import { DEFAULT_USER_ID, DEFAULT_USER_TIMEZONE, ensureUserExists, resolveUserId } from "@/lib/db/users";
 import { syncGoalProgress } from "@/lib/plannerStore";
@@ -258,7 +259,10 @@ export async function writePlannerState(input, rawUserId) {
     await ensurePlannerUser(db, userId);
     await replaceGoalsForUser(db, userId, normalized.goals);
     await replaceTasksForUser(db, userId, normalized.tasks);
-    await rebuildReminderJobsForUser(db, userId, normalized.tasks);
+    const leadSeconds = await getReminderLeadSecondsForUser(db, userId);
+    await rebuildReminderJobsForUser(db, userId, normalized.tasks, {
+      leadSeconds,
+    });
     return readStateFromRelationalTables(db, userId);
   });
 }

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
@@ -139,6 +139,7 @@ export default function DailyPage() {
   const [justCompletedTaskId, setJustCompletedTaskId] = useState("");
   const [justCompletedCheer, setJustCompletedCheer] = useState(CHEER_MESSAGES[0]);
   const completionEffectTimeoutRef = useRef(null);
+  const alertTimeoutRef = useRef(null);
   const [form, setForm] = useState({
     date: todayISO(),
     title: "",
@@ -224,9 +225,31 @@ export default function DailyPage() {
       if (completionEffectTimeoutRef.current) {
         clearTimeout(completionEffectTimeoutRef.current);
       }
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+      }
     },
     []
   );
+
+  useEffect(() => {
+    if (!alert) {
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+        alertTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    if (alertTimeoutRef.current) {
+      clearTimeout(alertTimeoutRef.current);
+    }
+
+    alertTimeoutRef.current = setTimeout(() => {
+      setAlert("");
+      alertTimeoutRef.current = null;
+    }, 3000);
+  }, [alert]);
 
   useEffect(() => {
     if (drag) {
@@ -384,8 +407,13 @@ export default function DailyPage() {
       quote="Plan the day before it starts."
       themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
       onToggleTheme={actions.toggleTheme}
+      hideHero
+      mainClassName="main-compact main-daily"
     >
-      <section className="panel">
+      <section className={`panel daily-timeline-panel${timelineMode !== "month" ? " is-timeline-mode" : ""}`}>
+        <div className="panel-head daily-panel-head">
+          <div className="daily-head-main">
+            <h3>{viewMeta.panelTitle}</h3>
             <div className="timeline-progress-card timeline-progress-card-head" aria-live="polite">
               <div
                 className="timeline-progress-donut"
@@ -407,11 +435,6 @@ export default function DailyPage() {
                 </span>
               </div>
             </div>
-
-        <div className="panel-head">
-          <div>
-            <h3>{viewMeta.panelTitle}</h3>
-            <p className="muted">Thêm · Sửa · Xóa · Kéo thả đổi thời gian</p>
           </div>
           <div className="timeline-head-controls">
             <div className="timeline-view-toggle" role="tablist" aria-label="Chế độ timeline">
@@ -476,7 +499,11 @@ export default function DailyPage() {
             Hủy sửa
           </button>
         ) : null}
-        {alert ? <p className="alert">{alert}</p> : null}
+        {alert ? (
+          <p className="toast-alert toast-alert-error" role="status" aria-live="polite">
+            {alert}
+          </p>
+        ) : null}
         <div className="timeline-summary">
           <p className="muted" style={{ marginTop: 8 }}>
             Đang xem: {rangeLabel}. Double-click vào task để mở sửa nhanh.
@@ -681,4 +708,5 @@ export default function DailyPage() {
     </AppShell>
   );
 }
+
 

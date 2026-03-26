@@ -1,5 +1,6 @@
 import { BusinessError } from "@/lib/agent/workflow-engine/errors";
-import { DEFAULT_INTEGRATION_ID, normalizeLeadMinutes } from "@/lib/reminder/scheduler";
+import { getReminderLeadSecondsForUser } from "@/lib/db/queries/reminderUserSettingQueries";
+import { DEFAULT_INTEGRATION_ID, normalizeLeadSeconds } from "@/lib/reminder/scheduler";
 
 function toDateString(value) {
   if (!value) return null;
@@ -234,15 +235,40 @@ async function loadUserTimezone(db, userId) {
   return result.rows[0].timezone || "Asia/Ho_Chi_Minh";
 }
 
-export async function upsertReminderJob({ db, userId, taskId, date, start, minutesBefore }) {
-  if (!Number.isInteger(minutesBefore) || minutesBefore < 0) {
-    throw new BusinessError("Reminder offset must be >= 0.", {
-      code: "INVALID_REMINDER_OFFSET",
-      status: 400,
-    });
+export async function upsertReminderJob({
+  db,
+  userId,
+  taskId,
+  date,
+  start,
+  minutesBefore,
+  leadSeconds,
+}) {
+  let resolvedLeadSeconds = null;
+
+  if (leadSeconds !== undefined && leadSeconds !== null && leadSeconds !== "") {
+    const parsed = Number.parseInt(leadSeconds, 10);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      throw new BusinessError("Reminder lead_seconds must be >= 0.", {
+        code: "INVALID_REMINDER_OFFSET",
+        status: 400,
+      });
+    }
+    resolvedLeadSeconds = normalizeLeadSeconds(parsed);
+  } else if (minutesBefore !== undefined && minutesBefore !== null && minutesBefore !== "") {
+    const parsed = Number.parseInt(minutesBefore, 10);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      throw new BusinessError("Reminder offset must be >= 0.", {
+        code: "INVALID_REMINDER_OFFSET",
+        status: 400,
+      });
+    }
+    resolvedLeadSeconds = normalizeLeadSeconds(parsed * 60);
+  } else {
+    resolvedLeadSeconds = await getReminderLeadSecondsForUser(db, userId);
   }
 
-  const leadMinutes = normalizeLeadMinutes(minutesBefore);
+  const leadMinutes = Math.floor(resolvedLeadSeconds / 60);
   const timezone = await loadUserTimezone(db, userId);
 
   await db.query(
@@ -264,26 +290,29 @@ export async function upsertReminderJob({ db, userId, taskId, date, start, minut
         send_at,
         status,
         retry_count,
+        lead_seconds,
         lead_minutes
       )
         VALUES (
           $1::uuid,
           $2::uuid,
           $3,
-          ((($4::date + $5::time) AT TIME ZONE $6) - make_interval(mins => $7::int)),
+          ((($4::date + $5::time) AT TIME ZONE $6) - make_interval(secs => $7::int)),
           'pending',
           0,
-          $7::int
+          $7::int,
+          $8::int
         )
-      RETURNING id, send_at, status, lead_minutes
+      RETURNING id, send_at, status, lead_seconds, lead_minutes
     `,
-    [userId, taskId, DEFAULT_INTEGRATION_ID, date, start, timezone, leadMinutes]
+    [userId, taskId, DEFAULT_INTEGRATION_ID, date, start, timezone, resolvedLeadSeconds, leadMinutes]
   );
 
   return {
     id: result.rows[0].id,
     send_at: result.rows[0].send_at,
     status: result.rows[0].status,
+    lead_seconds: result.rows[0].lead_seconds,
     minutes_before: result.rows[0].lead_minutes,
   };
 }

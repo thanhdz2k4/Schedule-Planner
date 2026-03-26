@@ -9,6 +9,9 @@ const ALLOWED_INTENTS = new Set([
   "query_data",
   "set_goal",
   "plan_day",
+  "plan_week",
+  "detect_risk",
+  "reschedule_chain",
   "configure_reminder",
   "connect_messenger",
 ]);
@@ -127,7 +130,7 @@ function buildSystemPrompt(todayISO) {
     "Return plain JSON only, no markdown.",
     "Required schema:",
     "{",
-    '  "intent": "create_task|update_task|delete_task|query_data|set_goal|plan_day|configure_reminder|connect_messenger",',
+    '  "intent": "create_task|update_task|delete_task|query_data|set_goal|plan_day|plan_week|detect_risk|reschedule_chain|configure_reminder|connect_messenger",',
     '  "confidence": 0.0-1.0,',
     '  "entities": { ... },',
     '  "need_clarification": true|false,',

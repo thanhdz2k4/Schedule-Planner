@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/focus", label: "Tập trung" },
   { href: "/reminders", label: "Nhắc việc" },
   { href: "/integrations", label: "Tích hợp" },
+  { href: "/proactive", label: "Proactive" },
   { href: "/agent-lab", label: "Agent Lab" },
 ];
 

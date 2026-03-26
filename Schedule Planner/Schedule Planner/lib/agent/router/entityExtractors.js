@@ -1,4 +1,4 @@
-import { compactObject, normalizeForMatch, pad2 } from "@/lib/agent/router/textUtils";
+﻿import { compactObject, normalizeForMatch, pad2 } from "@/lib/agent/router/textUtils";
 
 function toISODate(date) {
   return date.toISOString().slice(0, 10);
@@ -142,8 +142,18 @@ function normalizeTimeRange(start, end) {
 }
 
 function extractTimeRange(normalizedText) {
+  const endByPhrase = normalizedText.match(
+    /\bluc\s*(\d{1,2})(?:[:h](\d{1,2}))?\s*(?:gio)?\s*(?:ket thuc|xong luc|xong|den|toi|-)\s*(\d{1,2})(?:[:h](\d{1,2}))?\s*(?:gio)?\b/
+  );
+
+  if (endByPhrase) {
+    const start = parseTimeParts(endByPhrase[1], endByPhrase[2], normalizedText);
+    const end = parseTimeParts(endByPhrase[3], endByPhrase[4], normalizedText);
+    return normalizeTimeRange(start, end);
+  }
+
   const rangeMatch = normalizedText.match(
-    /\btu\s*(\d{1,2})(?:[:h](\d{1,2}))?\s*(?:den|toi|-)\s*(\d{1,2})(?:[:h](\d{1,2}))?\b/
+    /\btu\s*(\d{1,2})(?:[:h](\d{1,2}))?\s*(?:gio)?\s*(?:den|toi|-)\s*(\d{1,2})(?:[:h](\d{1,2}))?\s*(?:gio)?\b/
   );
 
   if (rangeMatch) {
@@ -173,9 +183,14 @@ function extractTimeRange(normalizedText) {
 }
 
 function extractSingleTime(normalizedText) {
-  const markerMatch = normalizedText.match(/\b(?:luc|vao|at)\s*(\d{1,2})(?:[:h](\d{1,2}))?\b/);
+  const markerMatch = normalizedText.match(/\b(?:luc|vao|at)\s*(\d{1,2})(?:[:h](\d{1,2}))?\s*(?:gio)?\b/);
   if (markerMatch) {
     return parseTimeParts(markerMatch[1], markerMatch[2], normalizedText);
+  }
+
+  const hourWord = normalizedText.match(/\b(\d{1,2})\s*gio\b/);
+  if (hourWord) {
+    return parseTimeParts(hourWord[1], "0", normalizedText);
   }
 
   const genericMatch = normalizedText.match(/\b(\d{1,2})h\b/);
@@ -207,11 +222,11 @@ function extractStatus(normalizedText) {
     return "todo";
   }
 
-  if (/\b(hoan thanh|xong|done)\b/.test(normalizedText)) {
+  if (/\b(hoan thanh|xong|xong roi|da xong|done|completed|complete|finished|finish)\b/.test(normalizedText)) {
     return "done";
   }
 
-  if (/\b(dang lam|in progress|doing)\b/.test(normalizedText)) {
+  if (/\b(dang lam|dang xu ly|in progress|inprogress|doing|active)\b/.test(normalizedText)) {
     return "doing";
   }
 
@@ -281,6 +296,20 @@ function extractGoalTarget(normalizedText) {
   return null;
 }
 
+function extractRescheduleCount(normalizedText) {
+  const match = normalizedText.match(/\b(?:top|toi da|max|maximum|count)?\s*(\d{1,2})\s*(?:task|viec)\b/);
+  if (!match) {
+    return null;
+  }
+
+  const value = Number.parseInt(match[1], 10);
+  if (!Number.isInteger(value) || value <= 0) {
+    return null;
+  }
+
+  return Math.min(value, 10);
+}
+
 function cleanupTitle(value) {
   if (!value || typeof value !== "string") {
     return null;
@@ -308,25 +337,47 @@ function firstMatch(text, patterns) {
 function extractTitle(text, intent) {
   const patternsByIntent = {
     create_task: [
-      /(?:tạo|tao|thêm|them|add|đặt|dat|lên|len)\s+task\s+(.+?)(?=\s(?:lúc|luc|vào|vao|từ|tu|ngày|ngay|mai|hôm nay|hom nay|ưu tiên|uu tien|deadline|trước|truoc)\b|$)/i,
-      /(?:nhắc tôi|nhac toi)\s+(.+?)(?=\s(?:lúc|luc|vào|vao|từ|tu|ngày|ngay|mai|hôm nay|hom nay|trước|truoc)\b|$)/i,
-      /task\s+(.+?)(?=\s(?:lúc|luc|vào|vao|từ|tu|ngày|ngay|mai|hôm nay|hom nay|ưu tiên|uu tien|deadline|trước|truoc)\b|$)/i,
+      /(?:t?o|tao|thêm|them|add|d?t|dat|lên|len)\s+task\s+(.+?)(?=\s(?:lúc|luc|vào|vao|t?|tu|ngày|ngay|mai|hôm nay|hom nay|uu tiên|uu tien|deadline|tru?c|truoc)\b|$)/iu,
+      /(?:nh?c tôi|nhac toi)\s+(.+?)(?=\s(?:lúc|luc|vào|vao|t?|tu|ngày|ngay|mai|hôm nay|hom nay|tru?c|truoc)\b|$)/iu,
+      /task\s+(.+?)(?=\s(?:lúc|luc|vào|vao|t?|tu|ngày|ngay|mai|hôm nay|hom nay|uu tiên|uu tien|deadline|tru?c|truoc)\b|$)/iu,
+      /(?:t?o|tao|thêm|them|add|d?t|dat|lên|len|l?p|lap)\s+(?:l?ch|lich|schedule)\s+(.+?)(?=\s(?:lúc|luc|vào|vao|t?|tu|ngày|ngay|mai|hôm nay|hom nay|uu tiên|uu tien|deadline|tru?c|truoc)\b|$)/iu,
+      /(?:tôi|toi|minh|em)\s+có\s+(.+?)(?=\s(?:lúc|luc|vào|vao|t?|tu|ngày|ngay|mai|hôm nay|hom nay|uu tiên|uu tien|deadline|tru?c|truoc)\b|$)/iu,
     ],
     update_task: [
-      /(?:sửa|sua|cập nhật|cap nhat|dời|doi|chuyển|chuyen|đánh dấu|danh dau)\s+task\s+(.+?)(?=\s(?:sang|qua|lúc|luc|vào|vao|ngày|ngay|thành|thanh|ưu tiên|uu tien|đã|da|xong|done)\b|$)/i,
-      /task\s+(.+?)(?=\s(?:sang|qua|lúc|luc|vào|vao|ngày|ngay|thành|thanh|ưu tiên|uu tien|đã|da|xong|done)\b|$)/i,
+      /(?:s?a|sua|c?p nh?t|cap nhat|d?i|doi|chuy?n|chuyen|dánh d?u|danh dau)\s+task\s+(.+?)(?=\s(?:sang|qua|lúc|luc|vào|vao|ngày|ngay|thành|thanh|uu tiên|uu tien|dã|da|xong|done)\b|$)/iu,
+      /task\s+(.+?)(?=\s(?:sang|qua|lúc|luc|vào|vao|ngày|ngay|thành|thanh|uu tiên|uu tien|dã|da|xong|done)\b|$)/iu,
+      /(?:dánh d?u|danh dau)\s+(.+?)(?=\s(?:là|la|thành|thanh|xong|done|doing|todo)\b|$)/iu,
     ],
     delete_task: [
-      /(?:xóa|xoa|delete|hủy|huy|bỏ|bo)\s+task\s+(.+?)(?=\s(?:ngày|ngay|lúc|luc|vào|vao|từ|tu|mai|hôm nay|hom nay)\b|$)/i,
-      /(?:xóa|xoa|delete|hủy|huy|bỏ|bo)\s+(.+)$/i,
+      /(?:xóa|xoa|delete|h?y|huy|b?|bo)\s+task\s+(.+?)(?=\s(?:ngày|ngay|lúc|luc|vào|vao|t?|tu|mai|hôm nay|hom nay)\b|$)/iu,
+      /(?:xóa|xoa|delete|h?y|huy|b?|bo)\s+(.+)$/iu,
     ],
     set_goal: [
-      /(?:mục tiêu|muc tieu|goal)\s+(.+?)(?=\s(?:là|la|target|đến|den|deadline|ngày|ngay|\d)\b|$)/i,
-      /(?:đặt|dat|set)\s+goal\s+(.+?)(?=\s(?:là|la|target|đến|den|deadline|ngày|ngay|\d)\b|$)/i,
+      /(?:m?c tiêu|muc tieu|goal)\s+(.+?)(?=\s(?:là|la|target|d?n|den|deadline|ngày|ngay|\d)\b|$)/iu,
+      /(?:d?t|dat|set)\s+goal\s+(.+?)(?=\s(?:là|la|target|d?n|den|deadline|ngày|ngay|\d)\b|$)/iu,
     ],
   };
 
   return firstMatch(text, patternsByIntent[intent] || []);
+}
+
+function inferCreateTaskTitle(normalizedText) {
+  const specific = normalizedText.match(
+    /\b(?:co|lam|di)\s+([a-z0-9 ]+?)(?=\s(?:luc|vao|tu|ngay|mai|hom nay|uu tien|deadline|truoc)\b|$)/
+  );
+  if (specific?.[1]) {
+    return cleanupTitle(specific[1]);
+  }
+
+  if (/\b(cuoc hop|meeting|hop)\b/.test(normalizedText)) {
+    return "cuoc hop";
+  }
+
+  if (/\ban\b/.test(normalizedText)) {
+    return "an";
+  }
+
+  return null;
 }
 
 function extractDeadlineDate(normalizedText, now) {
@@ -342,14 +393,18 @@ export function extractEntities({ text, intent, now = new Date() }) {
   const normalizedText = normalizeForMatch(text);
   const date = extractDateValue(normalizedText, now);
   const range = extractTimeRange(normalizedText);
-  const single = (!range.start || !range.end) ? extractSingleTime(normalizedText) : null;
+  const single = !range.start || !range.end ? extractSingleTime(normalizedText) : null;
   const start = range.start || single;
   const end = range.end || (single ? fromMinutes(toMinutes(single) + 60) : null);
   const normalizedRange = normalizeTimeRange(start, end);
   const priority = extractPriority(normalizedText);
   const status = extractStatus(normalizedText);
-  const title = extractTitle(text, intent);
+  let title = extractTitle(text, intent);
+  if (!title && intent === "create_task") {
+    title = inferCreateTaskTitle(normalizedText);
+  }
   const target = extractGoalTarget(normalizedText);
+  const count = extractRescheduleCount(normalizedText);
   const minutesBefore = extractReminderOffset(normalizedText);
   const durationMinutes = extractDurationMinutes(normalizedText);
   const deadline = extractDeadlineDate(normalizedText, now) || (intent === "set_goal" ? date : null);
@@ -362,6 +417,7 @@ export function extractEntities({ text, intent, now = new Date() }) {
     priority,
     status,
     target,
+    count,
     deadline,
     minutes_before: minutesBefore,
     duration_minutes: durationMinutes,
@@ -369,3 +425,4 @@ export function extractEntities({ text, intent, now = new Date() }) {
 
   return entities;
 }
+

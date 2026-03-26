@@ -6,6 +6,7 @@ export function normalizeForMatch(text) {
   return text
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
     .toLowerCase()
     .replace(/[^a-z0-9:\/\-\s]/g, " ")
     .replace(/\s+/g, " ")

@@ -48,3 +48,35 @@ Trigger (time/event/chat)
 - >= 30% user sessions co proactive suggestion huu ich.
 - Ty le "plan rescue success" dat target da dat.
 - User co the deny/approve action ro rang.
+
+## 7. Trang thai trien khai
+
+Da trien khai:
+
+1. Migration:
+   - `db/migrations/010_proactive_planner_phase10.sql`
+2. Query layer:
+   - `lib/db/queries/assistantPolicyQueries.js`
+   - `lib/db/queries/assistantActionQueries.js`
+3. Workflow intents:
+   - `plan_day`
+   - `plan_week`
+   - `detect_risk`
+   - `reschedule_chain`
+4. Proactive scheduler + execution service:
+   - `worker/proactiveWorker.js`
+   - `lib/proactive/proposalBuilder.js`
+   - `lib/proactive/actionService.js`
+5. API cho phase 10:
+   - `POST /api/proactive/dispatch`
+   - `GET /api/proactive/actions`
+   - `POST /api/proactive/actions/{actionId}/decision`
+   - `GET /api/proactive/policies`
+   - `PUT /api/proactive/policies`
+6. UI thao tac phase 10:
+   - `app/proactive/page.js`
+
+Ghi chu:
+
+- `reschedule_chain` da duoc execute thuc su tren `tasks` sau khi approve.
+- Action policy `auto/ask/deny` duoc ap dung theo tung `action_type`.

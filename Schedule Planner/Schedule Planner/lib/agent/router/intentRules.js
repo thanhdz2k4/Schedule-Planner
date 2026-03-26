@@ -57,6 +57,46 @@ export const INTENT_RULES = [
     requiredEntities: [],
   },
   {
+    intent: "plan_week",
+    base: 0.34,
+    weight: 0.56,
+    patterns: [
+      /\bplan week\b/,
+      /\bke hoach tuan\b/,
+      /\blen lich tuan\b/,
+      /\btuan nay nen lam gi\b/,
+      /\btong quan tuan\b/,
+    ],
+    requiredEntities: [],
+  },
+  {
+    intent: "detect_risk",
+    base: 0.34,
+    weight: 0.56,
+    patterns: [
+      /\bdetect risk\b/,
+      /\bkiem tra rui ro\b/,
+      /\brui ro lich\b/,
+      /\bxung dot lich\b/,
+      /\boverdue\b/,
+      /\btre han\b/,
+    ],
+    requiredEntities: [],
+  },
+  {
+    intent: "reschedule_chain",
+    base: 0.34,
+    weight: 0.56,
+    patterns: [
+      /\breschedule\b/,
+      /\bdoi lich hang loat\b/,
+      /\bdoi lich day chuyen\b/,
+      /\bday lui lich\b/,
+      /\bchuyen cac task tre han\b/,
+    ],
+    requiredEntities: [],
+  },
+  {
     intent: "delete_task",
     base: 0.36,
     weight: 0.56,
@@ -94,7 +134,10 @@ export const INTENT_RULES = [
       /\bthem task\b/,
       /\badd task\b/,
       /\bdat lich\b/,
+      /\btao lich\b/,
+      /\bthem lich\b/,
       /\blen lich\b/,
+      /\bschedule\b/,
       /\btao viec\b/,
       /\bnhac toi\b/,
     ],
@@ -151,6 +194,28 @@ export function scoreIntentCandidates(text) {
 
   if (/\b(len ke hoach|sap lich|xep lich|plan)\b/.test(normalizedText)) {
     addBoost("plan_day", 0.28);
+  }
+
+  if (
+    /\b(tao|them|add|dat|len|lap|schedule)\b/.test(normalizedText) &&
+    /\b(task|lich|meeting|cuoc hop|hen|appointment|su kien|viec)\b/.test(normalizedText) &&
+    /\b(\d{1,2}:\d{2}|\d{1,2}\s*(h|gio)|hom nay|ngay mai|mai|20\d{2}-\d{1,2}-\d{1,2})\b/.test(
+      normalizedText
+    )
+  ) {
+    addBoost("create_task", 0.42);
+  }
+
+  if (/\b(tuan|week)\b/.test(normalizedText) && /\b(plan|ke hoach|tong quan)\b/.test(normalizedText)) {
+    addBoost("plan_week", 0.32);
+  }
+
+  if (/\b(rui ro|risk|xung dot|tre han|overdue)\b/.test(normalizedText)) {
+    addBoost("detect_risk", 0.34);
+  }
+
+  if (/\b(reschedule|doi lich|day lui|day chuyen)\b/.test(normalizedText)) {
+    addBoost("reschedule_chain", 0.36);
   }
 
   if (/\b(cau hinh|reminder|thong bao)\b/.test(normalizedText)) {

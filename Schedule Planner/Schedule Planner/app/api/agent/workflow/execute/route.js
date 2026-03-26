@@ -9,7 +9,16 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DIRECT_INTENTS = new Set(["create_task", "update_task", "delete_task", "query_data"]);
+const DIRECT_INTENTS = new Set([
+  "create_task",
+  "update_task",
+  "delete_task",
+  "query_data",
+  "plan_day",
+  "plan_week",
+  "detect_risk",
+  "reschedule_chain",
+]);
 
 function normalizeProvider(rawProvider) {
   const value = typeof rawProvider === "string" ? rawProvider.trim().toLowerCase() : "";

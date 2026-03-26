@@ -228,6 +228,18 @@ export default function DailyPage() {
     []
   );
 
+  useEffect(() => {
+    if (drag) {
+      document.body.classList.add("dragging-task");
+    } else {
+      document.body.classList.remove("dragging-task");
+    }
+
+    return () => {
+      document.body.classList.remove("dragging-task");
+    };
+  }, [drag]);
+
   if (!loaded) return null;
 
   function handleDateChange(nextDate) {
@@ -323,11 +335,13 @@ export default function DailyPage() {
     if (target instanceof HTMLElement && target.closest("button, input, label")) {
       return;
     }
+    event.preventDefault();
     setDrag({ taskId: task.id, startY: event.clientY });
   }
 
   function onDragMove(event) {
     if (!drag) return;
+    event.preventDefault();
     const deltaY = event.clientY - drag.startY;
     const deltaMinutes = Math.round((deltaY / HOUR_HEIGHT) * 2) * 30;
     if (deltaMinutes === 0) return;
@@ -338,6 +352,12 @@ export default function DailyPage() {
     } else {
       setAlert("");
       setDrag({ ...drag, startY: event.clientY });
+    }
+  }
+
+  function endDrag() {
+    if (drag) {
+      setDrag(null);
     }
   }
 
@@ -507,7 +527,12 @@ export default function DailyPage() {
             </div>
           </div>
         ) : (
-          <div className="timeline-wrap" onPointerMove={onDragMove} onPointerUp={() => setDrag(null)}>
+          <div
+            className={`timeline-wrap${drag ? " dragging" : ""}`}
+            onPointerMove={onDragMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+          >
             <div className="timeline-scroll-inner" style={isRangeMode ? { minWidth: `${timelineWidth}px` } : undefined}>
               {isRangeMode ? (
                 <div

@@ -1049,6 +1049,12 @@ body.dark .brand-dot {
   background: #fbfdf9;
 }
 
+.timeline-wrap.dragging,
+.timeline-wrap.dragging * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .timeline-scroll-inner {
   width: 100%;
 }
@@ -1129,6 +1135,10 @@ body.dark .brand-dot {
   gap: 6px;
   overflow: hidden;
   transition: border-color 0.18s ease, transform 0.18s ease;
+}
+
+.task-card:active {
+  cursor: grabbing;
 }
 
 .task-card.priority-high {
@@ -2509,6 +2519,12 @@ body.dark .dot {
   cursor: not-allowed;
 }
 
+body.dragging-task,
+body.dragging-task * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 .agent-history {
   display: grid;
   gap: 10px;
@@ -2568,4 +2584,218 @@ body.dark .dot {
   background: color-mix(in srgb, var(--surface) 90%, white 10%);
   color: inherit;
   padding: 0.45rem 0.65rem;
+}
+
+.proactive-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.proactive-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.proactive-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.proactive-policy-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f9fcf7 0%, #ffffff 100%);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 8px 16px rgba(58, 78, 54, 0.08);
+}
+
+.proactive-policy-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.proactive-policy-controls select {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f9fcf7;
+  color: var(--ink);
+  padding: 8px 10px;
+}
+
+.proactive-policy-controls select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--ring);
+  background: #ffffff;
+}
+
+.proactive-actions-head {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.proactive-actions-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.proactive-actions-filter-row button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f5f9f2;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+
+.proactive-actions-filter-row button.active {
+  color: var(--ink);
+  border-color: var(--line-strong);
+  background: #ffffff;
+}
+
+.proactive-actions-list {
+  display: grid;
+  gap: 10px;
+}
+
+.proactive-action-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f9fcf7 0%, #ffffff 100%);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 8px 16px rgba(58, 78, 54, 0.08);
+}
+
+.proactive-action-card.status-pending_approval {
+  border-color: rgba(171, 139, 66, 0.46);
+}
+
+.proactive-action-card.status-failed {
+  border-color: rgba(175, 63, 79, 0.45);
+}
+
+.proactive-action-card.status-executed {
+  border-color: rgba(14, 111, 93, 0.45);
+}
+
+.proactive-action-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.proactive-action-summary {
+  margin: 0;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.proactive-action-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.proactive-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.proactive-action-buttons .btn {
+  min-height: 38px;
+  padding: 8px 12px !important;
+  font-size: 0.8rem;
+}
+
+.proactive-status-pill.status-pending_approval {
+  border-color: rgba(171, 139, 66, 0.46);
+  background: rgba(241, 222, 167, 0.44);
+  color: #5f4a1f;
+}
+
+.proactive-status-pill.status-approved,
+.proactive-status-pill.status-executed {
+  border-color: rgba(14, 111, 93, 0.4);
+  color: #0b5d4f;
+  background: rgba(231, 249, 242, 0.92);
+}
+
+.proactive-status-pill.status-failed,
+.proactive-status-pill.status-denied {
+  border-color: rgba(175, 63, 79, 0.45);
+  color: #7f2430;
+  background: rgba(255, 237, 240, 0.85);
+}
+
+body.dark .proactive-policy-card,
+body.dark .proactive-action-card {
+  border-color: #4c6450;
+  background: linear-gradient(145deg, #304338 0%, #26392e 100%);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+}
+
+body.dark .proactive-policy-controls select {
+  background: #2a3c30;
+  border-color: #46604b;
+  color: var(--ink);
+}
+
+body.dark .proactive-policy-controls select:focus {
+  background: #324837;
+}
+
+body.dark .proactive-actions-filter-row button {
+  background: #2b3f32;
+  border-color: #4e6953;
+  color: #a8bbab;
+}
+
+body.dark .proactive-actions-filter-row button.active {
+  background: #34493c;
+  border-color: #58725f;
+  color: #e3efe3;
+}
+
+body.dark .proactive-status-pill.status-pending_approval {
+  border-color: rgba(234, 213, 141, 0.42);
+  color: #f0dfad;
+  background: rgba(90, 76, 31, 0.5);
+}
+
+body.dark .proactive-status-pill.status-approved,
+body.dark .proactive-status-pill.status-executed {
+  border-color: rgba(110, 224, 193, 0.45);
+  color: #d8f4eb;
+  background: rgba(42, 94, 79, 0.65);
+}
+
+body.dark .proactive-status-pill.status-failed,
+body.dark .proactive-status-pill.status-denied {
+  border-color: rgba(255, 158, 170, 0.44);
+  color: #ffd2d8;
+  background: rgba(81, 43, 49, 0.65);
+}
+
+@media (max-width: 760px) {
+  .proactive-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

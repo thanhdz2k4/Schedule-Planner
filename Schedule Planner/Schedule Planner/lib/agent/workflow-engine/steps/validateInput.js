@@ -5,6 +5,21 @@ const TIME_REGEX = /^\d{2}:\d{2}$/;
 const VALID_STATUS = new Set(["todo", "doing", "done"]);
 const VALID_PRIORITY = new Set(["high", "medium", "low"]);
 
+function normalizeForStatusMatch(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function isValidDate(date) {
   if (typeof date !== "string" || !DATE_REGEX.test(date)) {
     return false;
@@ -55,13 +70,37 @@ function normalizeStatus(rawStatus) {
   if (rawStatus === null || rawStatus === undefined || rawStatus === "") {
     return undefined;
   }
-  if (!VALID_STATUS.has(rawStatus)) {
+
+  const direct = typeof rawStatus === "string" ? rawStatus.trim().toLowerCase() : "";
+  if (VALID_STATUS.has(direct)) {
+    return direct;
+  }
+
+  const normalized = normalizeForStatusMatch(rawStatus);
+  if (
+    /\b(done|complete|completed|finish|finished|hoan thanh|xong|xong roi|da xong)\b/.test(
+      normalized
+    )
+  ) {
+    return "done";
+  }
+
+  if (/\b(doing|in progress|inprogress|dang lam|dang xu ly|active)\b/.test(normalized)) {
+    return "doing";
+  }
+
+  if (/\b(todo|to do|pending|chua lam|chua xong|not done)\b/.test(normalized)) {
+    return "todo";
+  }
+
+  if (!VALID_STATUS.has(direct)) {
     throw new BusinessError("status must be one of: todo, doing, done.", {
       code: "INVALID_STATUS",
       status: 400,
     });
   }
-  return rawStatus;
+
+  return direct;
 }
 
 function normalizePriority(rawPriority) {

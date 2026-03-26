@@ -13,6 +13,9 @@ const ALLOWED_INTENTS = new Set([
   "query_data",
   "set_goal",
   "plan_day",
+  "plan_week",
+  "detect_risk",
+  "reschedule_chain",
   "configure_reminder",
   "connect_messenger",
 ]);
@@ -166,13 +169,33 @@ function normalizeStatus(value) {
   const normalized = normalizeForMatch(typeof value === "string" ? value : "");
   if (!normalized) return value;
 
-  if (["done", "hoan thanh", "xong"].some((token) => normalized.includes(token))) {
+  if (
+    [
+      "done",
+      "hoan thanh",
+      "xong",
+      "xong roi",
+      "da xong",
+      "completed",
+      "complete",
+      "finished",
+      "finish",
+    ].some((token) => normalized.includes(token))
+  ) {
     return "done";
   }
-  if (["doing", "dang lam", "in progress"].some((token) => normalized.includes(token))) {
+  if (
+    ["doing", "dang lam", "in progress", "inprogress", "active", "dang xu ly"].some((token) =>
+      normalized.includes(token)
+    )
+  ) {
     return "doing";
   }
-  if (["todo", "chua lam", "pending"].some((token) => normalized.includes(token))) {
+  if (
+    ["todo", "to do", "chua lam", "chua xong", "pending", "not done"].some((token) =>
+      normalized.includes(token)
+    )
+  ) {
     return "todo";
   }
   return value;
@@ -223,7 +246,7 @@ function looksLikeFollowUpPatch(text) {
   if (!normalized) return false;
 
   const hasPatchSignals =
-    /\b(keo dai|thoi luong|duration|uu tien|nhac truoc|truoc \d+\s*phut|hoan thanh|dang lam|chua lam)\b/.test(
+    /\b(keo dai|thoi luong|duration|uu tien|nhac truoc|truoc \d+\s*phut|hoan thanh|xong|done|completed|finish|dang lam|chua lam|chua xong)\b/.test(
       normalized
     ) ||
     /\b\d+\s*(phut|gio|tieng)\b/.test(normalized);
@@ -235,6 +258,56 @@ function looksLikeFollowUpPatch(text) {
   const hasQuerySignals = /\b(bao nhieu|liet ke|thong ke|tong|ty le)\b/.test(normalized);
 
   return hasPatchSignals && !hasStrongNewIntentSignals && !hasQuerySignals;
+}
+
+function looksLikeCreateScheduleCommand(text, entities = {}) {
+  const normalized = normalizeForMatch(text);
+  if (!normalized) {
+    return false;
+  }
+
+  const hasCreateVerb = /\b(tao|them|add|dat|len|lap|schedule)\b/.test(normalized);
+  const hasScheduleTarget = /\b(task|lich|meeting|cuoc hop|hen|appointment|su kien|viec)\b/.test(
+    normalized
+  );
+  const hasTemporalHint =
+    hasValue(entities?.date) ||
+    hasValue(entities?.start) ||
+    hasValue(entities?.end) ||
+    /\b(hom nay|ngay mai|mai|thu\s*[2-8]|20\d{2}-\d{1,2}-\d{1,2}|\d{1,2}:\d{2}|\d{1,2}\s*(h|gio))\b/.test(
+      normalized
+    );
+
+  if (!hasCreateVerb || !hasScheduleTarget || !hasTemporalHint) {
+    return false;
+  }
+
+  if (/\b(plan day|plan week|ke hoach|tong quan|bao nhieu|thong ke|liet ke)\b/.test(normalized)) {
+    return false;
+  }
+
+  return true;
+}
+
+function seemsMultiTaskCreateCommand(text, intent) {
+  if (intent !== "create_task") {
+    return false;
+  }
+
+  const normalized = normalizeForMatch(text);
+  if (!normalized) {
+    return false;
+  }
+
+  const hasConnector = /\b(va|and|sau do|roi)\b/.test(normalized);
+  const startMarkers =
+    normalized.match(/\b(?:luc|vao|tu)\s*\d{1,2}(?::\d{1,2})?(?:\s*(?:h|gio))?\b/g) || [];
+  const explicitRanges =
+    normalized.match(
+      /\btu\s*\d{1,2}(?::\d{1,2})?(?:\s*(?:h|gio))?\s*(?:den|toi|-)\s*\d{1,2}(?::\d{1,2})?(?:\s*(?:h|gio))?\b/g
+    ) || [];
+
+  return hasConnector && (startMarkers.length >= 2 || explicitRanges.length >= 2);
 }
 
 function resolveMissingFields(intent, entities) {
@@ -272,6 +345,18 @@ function finalizeRouterResult({ rawResult, source, context, inputText }) {
       ? rawResult.entities
       : {};
 
+  const taskHintEntities = {
+    ...(context?.entities || {}),
+    ...currentEntities,
+  };
+
+  if (
+    ["plan_day", "plan_week", "query_data"].includes(intent) &&
+    looksLikeCreateScheduleCommand(inputText, taskHintEntities)
+  ) {
+    intent = "create_task";
+  }
+
   const entities = mergeEntitiesWithContext(currentEntities, context.entities);
 
   const confidenceValue =
@@ -282,7 +367,9 @@ function finalizeRouterResult({ rawResult, source, context, inputText }) {
   const missingFields = resolveMissingFields(intent, entities);
   const followUpResolvedByContext =
     Boolean(context.intent) && looksLikeFollowUpPatch(inputText) && missingFields.length === 0;
+  const multiTaskClarification = seemsMultiTaskCreateCommand(inputText, intent);
   const needClarification =
+    multiTaskClarification ||
     missingFields.length > 0 ||
     (!followUpResolvedByContext && confidenceValue < EXECUTE_CONFIDENCE_THRESHOLD);
 
@@ -292,7 +379,9 @@ function finalizeRouterResult({ rawResult, source, context, inputText }) {
     entities,
     need_clarification: needClarification,
     clarifying_question: needClarification
-      ? rawResult?.clarifying_question || buildClarificationQuestion({ intent, missingFields })
+      ? multiTaskClarification
+        ? "Hien tai moi lan chi tao 1 task. Ban muon tao task nao truoc?"
+        : rawResult?.clarifying_question || buildClarificationQuestion({ intent, missingFields })
       : null,
     source,
   };

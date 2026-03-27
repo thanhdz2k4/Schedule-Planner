@@ -22,7 +22,7 @@ export const updateTaskWorkflow = [
         userId: ctx.userId,
         taskId: targetInput.task_id,
         title: targetInput.title,
-        date: null,
+        date: targetInput.date,
       });
 
       ctx.state.taskBeforeUpdate = { ...ctx.state.targetTask };

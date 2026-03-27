@@ -233,9 +233,23 @@ function normalizeEntitiesForWorkflow(entities) {
   return normalized;
 }
 
-function mergeEntitiesWithContext(currentEntities, contextEntities) {
+function mergeEntitiesWithContext(currentEntities, contextEntities, intent) {
+  const baseContextEntities =
+    contextEntities && typeof contextEntities === "object" && !Array.isArray(contextEntities)
+      ? { ...contextEntities }
+      : {};
+
+  // For update flow, do not carry stale time/date fields from previous turns.
+  // Users often send short follow-ups like "task X da xong", which should only patch status.
+  if (intent === "update_task") {
+    delete baseContextEntities.date;
+    delete baseContextEntities.start;
+    delete baseContextEntities.end;
+    delete baseContextEntities.duration_minutes;
+  }
+
   const merged = {
-    ...(contextEntities || {}),
+    ...baseContextEntities,
     ...(currentEntities || {}),
   };
   return applyDurationToEntities(normalizeEntitiesForWorkflow(merged));
@@ -357,7 +371,7 @@ function finalizeRouterResult({ rawResult, source, context, inputText }) {
     intent = "create_task";
   }
 
-  const entities = mergeEntitiesWithContext(currentEntities, context.entities);
+  const entities = mergeEntitiesWithContext(currentEntities, context.entities, intent);
 
   const confidenceValue =
     typeof rawResult?.confidence === "number" && !Number.isNaN(rawResult.confidence)

@@ -128,12 +128,33 @@ function pickLocalized(value, locale, fallback = "") {
   return fallback;
 }
 
-function normalizeApiErrorMessage(message, locale, copy) {
-  if (locale !== "en" || typeof message !== "string") {
-    return message;
+function normalizeApiErrorMessage(payload, locale, copy) {
+  const message = typeof payload?.message === "string" ? payload.message : "";
+  const code = typeof payload?.code === "string" ? payload.code : "";
+
+  if (locale !== "en") {
+    return message || copy.authFail;
   }
 
-  const mapped = {
+  const byCode = {
+    INVALID_PAYLOAD: "Invalid payload.",
+    INVALID_EMAIL: "Invalid email format.",
+    INVALID_PASSWORD: "Password must be 8-128 characters.",
+    EMAIL_EXISTS: "Email is already in use.",
+    INVALID_CREDENTIALS: "Incorrect email or password.",
+    REGISTER_FAILED: "Cannot create account right now.",
+    LOGIN_FAILED: "Cannot process sign-in.",
+    SESSION_INVALID: "Session is invalid.",
+  };
+
+  if (code && byCode[code]) {
+    return byCode[code];
+  }
+
+  if (!message) {
+    return copy.authFail;
+  }
+
     "Thiếu email hoặc mật khẩu.": "Missing email or password.",
     "Email không hợp lệ.": "Invalid email format.",
     "Mật khẩu phải có ít nhất 8 ký tự.": "Password must be at least 8 characters.",
@@ -142,7 +163,7 @@ function normalizeApiErrorMessage(message, locale, copy) {
     "Session is invalid.": "Session is invalid.",
   };
 
-  return mapped[message] || copy.authFail;
+  return legacyByMessage[message] || message;
 }
 
 async function safeJson(response) {
@@ -214,7 +235,7 @@ export default function AppShell({
 
       const payload = await safeJson(response);
       if (!response.ok) {
-        setAuthError(normalizeApiErrorMessage(payload?.message, locale, copy) || copy.authFail);
+        setAuthError(normalizeApiErrorMessage(payload, locale, copy) || copy.authFail);
         return;
       }
 

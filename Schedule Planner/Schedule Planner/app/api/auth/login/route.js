@@ -1,4 +1,4 @@
-import { createSessionToken } from "@/lib/auth/sessionToken";
+﻿import { createSessionToken } from "@/lib/auth/sessionToken";
 import { withTransaction } from "@/lib/db/client";
 import { ensureMigrations } from "@/lib/db/migrate";
 import { authenticateUserAccount } from "@/lib/db/users";
@@ -12,7 +12,7 @@ export async function POST(request) {
   try {
     payload = await request.json();
   } catch {
-    return NextResponse.json({ message: "Payload không hợp lệ." }, { status: 400 });
+    return NextResponse.json({ code: "INVALID_PAYLOAD", message: "Invalid payload." }, { status: 400 });
   }
 
   try {
@@ -26,7 +26,10 @@ export async function POST(request) {
     );
 
     if (!user) {
-      return NextResponse.json({ message: "Email hoặc mật khẩu không đúng." }, { status: 401 });
+      return NextResponse.json(
+        { code: "INVALID_CREDENTIALS", message: "Incorrect email or password." },
+        { status: 401 }
+      );
     }
 
     const token = createSessionToken(user);
@@ -40,6 +43,6 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error("POST /api/auth/login failed:", error);
-    return NextResponse.json({ message: "Không thể đăng nhập." }, { status: 500 });
+    return NextResponse.json({ code: "LOGIN_FAILED", message: "Cannot process sign-in." }, { status: 500 });
   }
 }

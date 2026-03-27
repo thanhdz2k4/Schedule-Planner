@@ -1,4 +1,4 @@
-import { createSessionToken } from "@/lib/auth/sessionToken";
+﻿import { createSessionToken } from "@/lib/auth/sessionToken";
 import { withTransaction } from "@/lib/db/client";
 import { ensureMigrations } from "@/lib/db/migrate";
 import { AuthInputError, createUserAccount } from "@/lib/db/users";
@@ -13,10 +13,10 @@ function mapAuthInputError(error) {
   }
 
   if (error.code === "EMAIL_EXISTS") {
-    return NextResponse.json({ message: error.message }, { status: 409 });
+    return NextResponse.json({ code: error.code, message: error.message }, { status: 409 });
   }
 
-  return NextResponse.json({ message: error.message }, { status: 400 });
+  return NextResponse.json({ code: error.code, message: error.message }, { status: 400 });
 }
 
 export async function POST(request) {
@@ -24,7 +24,7 @@ export async function POST(request) {
   try {
     payload = await request.json();
   } catch {
-    return NextResponse.json({ message: "Payload không hợp lệ." }, { status: 400 });
+    return NextResponse.json({ code: "INVALID_PAYLOAD", message: "Invalid payload." }, { status: 400 });
   }
 
   try {
@@ -54,6 +54,9 @@ export async function POST(request) {
     }
 
     console.error("POST /api/auth/register failed:", error);
-    return NextResponse.json({ message: "Không thể tạo tài khoản." }, { status: 500 });
+    return NextResponse.json(
+      { code: "REGISTER_FAILED", message: "Cannot create account right now." },
+      { status: 500 }
+    );
   }
 }

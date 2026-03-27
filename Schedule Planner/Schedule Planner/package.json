@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "worker:scheduler": "node scripts/background-agent.cjs"
+    "worker:scheduler": "node scripts/background-agent.cjs",
+    "db:migrate": "node --env-file=.env scripts/db-migrate.cjs",
+    "db:migrate:raw": "node scripts/db-migrate.cjs"
   },
   "dependencies": {
     "@nangohq/frontend": "^0.69.46",

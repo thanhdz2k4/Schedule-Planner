@@ -1,15 +1,20 @@
 import { Pool } from "pg";
+import { resolveDatabaseUrl, shouldUseSupabaseSsl, stripSslModeFromDatabaseUrl } from "@/lib/db/env";
 
 let pool;
 
 export function getPool() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error("Thieu DATABASE_URL de ket noi Postgres.");
+  const databaseUrl = resolveDatabaseUrl(process.env);
+  if (!databaseUrl) {
+    throw new Error("Thieu DATABASE_URL (hoac bien schedule_POSTGRES_URL) de ket noi Postgres.");
   }
 
   if (!pool) {
+    const useSsl = shouldUseSupabaseSsl(databaseUrl);
+    const connectionString = useSsl ? stripSslModeFromDatabaseUrl(databaseUrl) : databaseUrl;
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString,
+      ssl: useSsl ? { rejectUnauthorized: false } : undefined,
     });
   }
 

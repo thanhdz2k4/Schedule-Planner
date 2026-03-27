@@ -63,6 +63,76 @@ function normalizePath(name, fallback) {
   return raw.startsWith("/") ? raw : `/${raw}`;
 }
 
+function pickEnv(...names) {
+  for (const name of names) {
+    const value = readTextEnv(name, "");
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function resolveDatabaseUrl() {
+  const candidates = [
+    pickEnv("DATABASE_URL"),
+    pickEnv("schedule_POSTGRES_URL_NON_POOLING", "SCHEDULE_POSTGRES_URL_NON_POOLING"),
+    pickEnv("schedule_POSTGRES_URL", "SCHEDULE_POSTGRES_URL"),
+    pickEnv("POSTGRES_URL_NON_POOLING"),
+    pickEnv("POSTGRES_URL"),
+    pickEnv("schedule_POSTGRES_PRISMA_URL", "SCHEDULE_POSTGRES_PRISMA_URL"),
+    pickEnv("POSTGRES_PRISMA_URL"),
+  ];
+
+  for (const value of candidates) {
+    if (value) {
+      return value;
+    }
+  }
+
+  const host = pickEnv("schedule_POSTGRES_HOST", "SCHEDULE_POSTGRES_HOST", "POSTGRES_HOST");
+  const database = pickEnv("schedule_POSTGRES_DATABASE", "SCHEDULE_POSTGRES_DATABASE", "POSTGRES_DATABASE");
+  const user = pickEnv("schedule_POSTGRES_USER", "SCHEDULE_POSTGRES_USER", "POSTGRES_USER");
+  const password = pickEnv("schedule_POSTGRES_PASSWORD", "SCHEDULE_POSTGRES_PASSWORD", "POSTGRES_PASSWORD");
+  const port = pickEnv("schedule_POSTGRES_PORT", "SCHEDULE_POSTGRES_PORT", "POSTGRES_PORT") || "5432";
+
+  if (!host || !database || !user || !password) {
+    return "";
+  }
+
+  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
+}
+
+function shouldUseSupabaseSsl(databaseUrl) {
+  if (!databaseUrl) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(databaseUrl);
+    const host = (parsed.hostname || "").toLowerCase();
+    const mode = (parsed.searchParams.get("sslmode") || "").toLowerCase();
+    return host.includes("supabase.co") || mode === "require" || mode === "verify-ca" || mode === "verify-full";
+  } catch {
+    return false;
+  }
+}
+
+function stripSslModeFromDatabaseUrl(databaseUrl) {
+  if (!databaseUrl) {
+    return databaseUrl;
+  }
+
+  try {
+    const parsed = new URL(databaseUrl);
+    parsed.searchParams.delete("sslmode");
+    return parsed.toString();
+  } catch {
+    return databaseUrl;
+  }
+}
+
 function summarizePayload(payload) {
   try {
     return JSON.stringify(payload);
@@ -117,7 +187,7 @@ const config = {
   nangoTelegramDeleteWebhookPath: normalizePath("NANGO_TELEGRAM_DELETE_WEBHOOK_PATH", "/proxy/deleteWebhook"),
   telegramPollDeleteWebhookOnConflict: readBoolEnv("TELEGRAM_POLL_DELETE_WEBHOOK_ON_CONFLICT", true),
   telegramWebhookSecretToken: readTextEnv("TELEGRAM_WEBHOOK_SECRET_TOKEN", ""),
-  databaseUrl: readTextEnv("DATABASE_URL", ""),
+  databaseUrl: resolveDatabaseUrl(),
 };
 
 if (!config.databaseUrl) {
@@ -126,7 +196,10 @@ if (!config.databaseUrl) {
 }
 
 const pool = new Pool({
-  connectionString: config.databaseUrl,
+  connectionString: shouldUseSupabaseSsl(config.databaseUrl)
+    ? stripSslModeFromDatabaseUrl(config.databaseUrl)
+    : config.databaseUrl,
+  ssl: shouldUseSupabaseSsl(config.databaseUrl) ? { rejectUnauthorized: false } : undefined,
   max: 4,
   idleTimeoutMillis: 10000,
 });

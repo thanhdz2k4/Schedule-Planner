@@ -1,37 +1,139 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import AppShell from "@/components/AppShell";
 import { usePlannerData } from "@/hooks/usePlannerData";
-import { priorityLabel, statusLabel, toMinutes, todayISO } from "@/lib/plannerStore";
+import { useUiLocale } from "@/hooks/useUiLocale";
+import { toMinutes, todayISO } from "@/lib/plannerStore";
+import cancelIcon from "@/images/icons8-cancel-240.png";
 
 const HOUR_HEIGHT = 36;
 const TIMELINE_GUTTER = 74;
 const TIMELINE_RIGHT_PADDING = 22;
-const WEEKDAY_SHORT = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
-const CHEER_MESSAGES = ["Tuyệt vời!", "Xuất sắc!", "Hoàn thành!", "Rất tốt!", "Tuyệt cú mèo!"];
+const WEEKDAY_SHORT_BY_LOCALE = {
+  vi: ["CN", "T2", "T3", "T4", "T5", "T6", "T7"],
+  en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+};
+
+const CHEER_MESSAGES_BY_LOCALE = {
+  vi: ["Tuyệt vời!", "Xuất sắc!", "Hoàn thành!", "Rất tốt!", "Tuyệt cú mèo!"],
+  en: ["Awesome!", "Great!", "Done!", "Nice work!", "Excellent!"],
+};
 
 const VIEW_OPTIONS = [
-  { value: "day", label: "Ngày" },
-  { value: "week", label: "Tuần" },
-  { value: "month", label: "Tháng" },
+  { value: "day", label: { vi: "Ngày", en: "Day" } },
+  { value: "week", label: { vi: "Tuần", en: "Week" } },
+  { value: "month", label: { vi: "Tháng", en: "Month" } },
 ];
 
 const VIEW_META = {
   day: {
-    title: "Timeline Ngày",
-    subtitle: "Sắp lịch theo giờ, không cho phép trùng task",
-    panelTitle: "Lịch Làm Việc Theo Ngày",
+    title: { vi: "Timeline Ngày", en: "Day Timeline" },
+    subtitle: {
+      vi: "Sắp lịch theo giờ, không cho phép trùng task",
+      en: "Plan tasks by hour with no overlaps",
+    },
+    panelTitle: { vi: "Lịch Làm Việc Theo Ngày", en: "Daily Work Timeline" },
   },
   week: {
-    title: "Timeline Tuần",
-    subtitle: "Theo dõi toàn bộ task trong tuần trên cùng một timeline",
-    panelTitle: "Lịch Làm Việc Theo Tuần",
+    title: { vi: "Timeline Tuần", en: "Week Timeline" },
+    subtitle: {
+      vi: "Theo dõi toàn bộ task trong tuần trên cùng một timeline",
+      en: "Track all tasks in the week on a single timeline",
+    },
+    panelTitle: { vi: "Lịch Làm Việc Theo Tuần", en: "Weekly Work Timeline" },
   },
   month: {
-    title: "Lịch Làm Việc Tháng",
-    subtitle: "Hiển thị dạng bảng tháng đầy đủ để xem task rõ ràng",
-    panelTitle: "Lịch Làm Việc Theo Tháng",
+    title: { vi: "Lịch Làm Việc Tháng", en: "Month Schedule" },
+    subtitle: {
+      vi: "Hiển thị dạng bảng tháng đầy đủ để xem task rõ ràng",
+      en: "Full monthly board view for clearer task tracking",
+    },
+    panelTitle: { vi: "Lịch Làm Việc Theo Tháng", en: "Monthly Work Timeline" },
+  },
+};
+
+const STATUS_LABELS = {
+  vi: { todo: "Chưa làm", doing: "Đang làm", done: "Hoàn thành" },
+  en: { todo: "To do", doing: "In progress", done: "Done" },
+};
+
+const PRIORITY_LABELS = {
+  vi: { high: "Cao", medium: "Trung bình", low: "Thấp" },
+  en: { high: "High", medium: "Medium", low: "Low" },
+};
+
+const COPY = {
+  vi: {
+    quote: "Lên kế hoạch trước khi ngày mới bắt đầu.",
+    themeLight: "Chế độ sáng",
+    themeDark: "Chế độ tối",
+    languageSwitch: "Ngôn ngữ",
+    languageAria: "Chuyển ngôn ngữ Việt hoặc Anh",
+    timelineModeAria: "Chế độ timeline",
+    doneShort: "Xong",
+    monthToday: "Hôm nay",
+    monthPrev: "Tháng trước",
+    monthNext: "Tháng sau",
+    taskPlaceholder: "Tên task",
+    noGoal: "Không gắn mục tiêu",
+    addTask: "Thêm task",
+    updateTask: "Cập nhật task",
+    viewing: "Đang xem",
+    quickEditHint: "Double-click vào task để mở sửa nhanh.",
+    goalPrefix: "Mục tiêu",
+    completedLabel: "Hoàn thành",
+    edit: "Sửa",
+    delete: "Xóa",
+    cancelEdit: "Hủy sửa task",
+    doneCheckTitle: "Đánh dấu hoàn thành",
+    priorityWord: "ưu tiên",
+    emptyTitleAlert: "Vui lòng nhập tên task.",
+    endTimeAlert: "Giờ kết thúc phải lớn hơn giờ bắt đầu.",
+    overlapAlert: "Task bị trùng giờ trong cùng ngày.",
+    dragOverlapAlert: "Không thể kéo vì bị trùng giờ.",
+    noTaskInScope: "Chưa có task",
+    remainingPrefix: "Còn",
+    inMonth: "trong tháng này",
+    inWeek: "trong tuần này",
+    inDay: "trong ngày này",
+    taskWord: "task",
+  },
+  en: {
+    quote: "Plan the day before it starts.",
+    themeLight: "Light mode",
+    themeDark: "Dark mode",
+    languageSwitch: "Language",
+    languageAria: "Switch language between Vietnamese and English",
+    timelineModeAria: "Timeline mode",
+    doneShort: "Done",
+    monthToday: "Today",
+    monthPrev: "Previous month",
+    monthNext: "Next month",
+    taskPlaceholder: "Task title",
+    noGoal: "No goal",
+    addTask: "Add task",
+    updateTask: "Update task",
+    viewing: "Viewing",
+    quickEditHint: "Double-click a task to quick edit.",
+    goalPrefix: "Goal",
+    completedLabel: "Complete",
+    edit: "Edit",
+    delete: "Delete",
+    cancelEdit: "Cancel editing task",
+    doneCheckTitle: "Mark as done",
+    priorityWord: "priority",
+    emptyTitleAlert: "Please enter a task name.",
+    endTimeAlert: "End time must be later than start time.",
+    overlapAlert: "Task overlaps another task on the same day.",
+    dragOverlapAlert: "Cannot drag because it overlaps another task.",
+    noTaskInScope: "No tasks",
+    remainingPrefix: "Remaining",
+    inMonth: "this month",
+    inWeek: "this week",
+    inDay: "this day",
+    taskWord: "task",
   },
 };
 
@@ -66,13 +168,59 @@ function startOfWeekMonday(date) {
   return next;
 }
 
-function formatDisplayDate(isoDate) {
-  const [year, month, day] = isoDate.split("-");
-  return `${day}/${month}/${year}`;
+function dateLocale(locale) {
+  return locale === "en" ? "en-US" : "vi-VN";
 }
 
-function getDayWeekRangeDates(mode, anchorISODate) {
+function formatDisplayDate(isoDate, locale) {
+  const parsed = parseISODate(isoDate);
+  if (!parsed) return isoDate;
+  return parsed.toLocaleDateString(dateLocale(locale), {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function getStatusLabel(locale, status) {
+  return STATUS_LABELS[locale]?.[status] || status;
+}
+
+function getPriorityLabel(locale, priority) {
+  return PRIORITY_LABELS[locale]?.[priority] || priority;
+}
+
+function getTaskWord(locale, count) {
+  if (locale === "en") {
+    return count === 1 ? "task" : "tasks";
+  }
+  return "task";
+}
+
+function formatTaskCount(locale, count) {
+  if (!count) return "";
+  return `${count} ${getTaskWord(locale, count)}`;
+}
+
+function localizeActionMessage(message, locale, copy) {
+  if (locale !== "en" || typeof message !== "string") {
+    return message;
+  }
+
+  if (message === COPY.vi.overlapAlert) {
+    return copy.overlapAlert;
+  }
+
+  if (message === COPY.vi.dragOverlapAlert) {
+    return copy.dragOverlapAlert;
+  }
+
+  return message;
+}
+
+function getDayWeekRangeDates(mode, anchorISODate, locale) {
   const anchor = parseISODate(anchorISODate) || parseISODate(todayISO()) || new Date();
+  const weekdays = WEEKDAY_SHORT_BY_LOCALE[locale] || WEEKDAY_SHORT_BY_LOCALE.vi;
 
   if (mode === "week") {
     const monday = startOfWeekMonday(anchor);
@@ -80,7 +228,7 @@ function getDayWeekRangeDates(mode, anchorISODate) {
       const date = addDays(monday, index);
       return {
         date: toISODate(date),
-        label: WEEKDAY_SHORT[date.getDay()],
+        label: weekdays[date.getDay()],
         subLabel: `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}`,
       };
     });
@@ -89,13 +237,13 @@ function getDayWeekRangeDates(mode, anchorISODate) {
   return [
     {
       date: toISODate(anchor),
-      label: formatDisplayDate(toISODate(anchor)),
-      subLabel: WEEKDAY_SHORT[anchor.getDay()],
+      label: formatDisplayDate(toISODate(anchor), locale),
+      subLabel: weekdays[anchor.getDay()],
     },
   ];
 }
 
-function buildMonthBoard(anchorISODate) {
+function buildMonthBoard(anchorISODate, locale) {
   const anchor = parseISODate(anchorISODate) || parseISODate(todayISO()) || new Date();
   const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const monthEnd = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
@@ -110,12 +258,12 @@ function buildMonthBoard(anchorISODate) {
     cells.push({
       date: toISODate(day),
       dayNumber: day.getDate(),
-      weekday: WEEKDAY_SHORT[day.getDay()],
+      weekday: (WEEKDAY_SHORT_BY_LOCALE[locale] || WEEKDAY_SHORT_BY_LOCALE.vi)[day.getDay()],
       inCurrentMonth: day.getMonth() === monthStart.getMonth(),
     });
   }
 
-  const monthLabel = monthStart.toLocaleDateString("vi-VN", {
+  const monthLabel = monthStart.toLocaleDateString(dateLocale(locale), {
     month: "long",
     year: "numeric",
   });
@@ -123,21 +271,22 @@ function buildMonthBoard(anchorISODate) {
   return { monthLabel, cells };
 }
 
-function getRangeLabel(mode, dates, monthBoard) {
+function getRangeLabel(mode, dates, monthBoard, locale) {
   if (mode === "month") return monthBoard.monthLabel;
   if (!dates.length) return "";
-  if (mode === "day") return formatDisplayDate(dates[0].date);
-  return `${formatDisplayDate(dates[0].date)} - ${formatDisplayDate(dates[dates.length - 1].date)}`;
+  if (mode === "day") return formatDisplayDate(dates[0].date, locale);
+  return `${formatDisplayDate(dates[0].date, locale)} - ${formatDisplayDate(dates[dates.length - 1].date, locale)}`;
 }
 
 export default function DailyPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
+  const [locale] = useUiLocale();
   const [timelineMode, setTimelineMode] = useState("day");
   const [alert, setAlert] = useState("");
   const [editingId, setEditingId] = useState("");
   const [drag, setDrag] = useState(null);
   const [justCompletedTaskId, setJustCompletedTaskId] = useState("");
-  const [justCompletedCheer, setJustCompletedCheer] = useState(CHEER_MESSAGES[0]);
+  const [justCompletedCheer, setJustCompletedCheer] = useState("");
   const completionEffectTimeoutRef = useRef(null);
   const alertTimeoutRef = useRef(null);
   const [form, setForm] = useState({
@@ -149,12 +298,14 @@ export default function DailyPage() {
     priority: "medium",
     goalId: "",
   });
+  const copy = COPY[locale] || COPY.vi;
+  const cheerMessages = CHEER_MESSAGES_BY_LOCALE[locale] || CHEER_MESSAGES_BY_LOCALE.vi;
 
   const goalTitleById = useMemo(
     () => new Map(state.goals.map((goal) => [goal.id, goal.title])),
     [state.goals]
   );
-  const monthBoard = useMemo(() => buildMonthBoard(form.date), [form.date]);
+  const monthBoard = useMemo(() => buildMonthBoard(form.date, locale), [form.date, locale]);
   const monthTasksByDate = useMemo(() => {
     const map = new Map();
     for (const cell of monthBoard.cells) {
@@ -177,8 +328,8 @@ export default function DailyPage() {
 
   const rangeDates = useMemo(() => {
     if (timelineMode === "month") return [];
-    return getDayWeekRangeDates(timelineMode, form.date);
-  }, [timelineMode, form.date]);
+    return getDayWeekRangeDates(timelineMode, form.date, locale);
+  }, [timelineMode, form.date, locale]);
   const rangeDateSet = useMemo(() => new Set(rangeDates.map((item) => item.date)), [rangeDates]);
   const columnIndexByDate = useMemo(
     () => new Map(rangeDates.map((item, index) => [item.date, index])),
@@ -196,8 +347,10 @@ export default function DailyPage() {
   const isRangeMode = timelineMode === "week";
   const columnWidth = timelineMode === "week" ? 230 : 120;
   const timelineWidth = TIMELINE_GUTTER + rangeDates.length * columnWidth + TIMELINE_RIGHT_PADDING;
-  const rangeLabel = getRangeLabel(timelineMode, rangeDates, monthBoard);
+  const rangeLabel = getRangeLabel(timelineMode, rangeDates, monthBoard, locale);
   const viewMeta = VIEW_META[timelineMode] || VIEW_META.day;
+  const scopeLabel =
+    timelineMode === "month" ? copy.inMonth : timelineMode === "week" ? copy.inWeek : copy.inDay;
   const monthCurrentDateSet = useMemo(
     () => new Set(monthBoard.cells.filter((cell) => cell.inCurrentMonth).map((cell) => cell.date)),
     [monthBoard.cells]
@@ -210,14 +363,7 @@ export default function DailyPage() {
     const done = scopedTasks.filter((task) => task.status === "done").length;
     const remaining = Math.max(0, total - done);
     const percent = total ? Math.round((done / total) * 100) : 0;
-    const scopeLabel =
-      timelineMode === "month"
-        ? "trong tháng này"
-        : timelineMode === "week"
-          ? "trong tuần này"
-          : "trong ngày này";
-
-    return { total, done, remaining, percent, scopeLabel };
+    return { total, done, remaining, percent };
   }, [state.tasks, timelineMode, monthCurrentDateSet, rangeDateSet]);
 
   useEffect(
@@ -280,12 +426,12 @@ export default function DailyPage() {
   function submitTask(event) {
     event.preventDefault();
     if (!form.title.trim()) {
-      setAlert("Vui lòng nhập tên task.");
+      setAlert(copy.emptyTitleAlert);
       return;
     }
 
     if (toMinutes(form.end) <= toMinutes(form.start)) {
-      setAlert("Giờ kết thúc phải lớn hơn giờ bắt đầu.");
+      setAlert(copy.endTimeAlert);
       return;
     }
 
@@ -293,7 +439,7 @@ export default function DailyPage() {
     const result = editingId ? actions.updateTask(editingId, payload) : actions.addTask(payload);
 
     if (!result.ok) {
-      setAlert(result.message);
+      setAlert(localizeActionMessage(result.message, locale, copy));
       return;
     }
 
@@ -335,12 +481,12 @@ export default function DailyPage() {
     if (!checked) {
       if (justCompletedTaskId === taskId) {
         setJustCompletedTaskId("");
-        setJustCompletedCheer(CHEER_MESSAGES[0]);
+        setJustCompletedCheer("");
       }
       return;
     }
 
-    const randomCheer = CHEER_MESSAGES[Math.floor(Math.random() * CHEER_MESSAGES.length)];
+    const randomCheer = cheerMessages[Math.floor(Math.random() * cheerMessages.length)];
     setJustCompletedCheer(randomCheer);
     setJustCompletedTaskId(taskId);
     if (completionEffectTimeoutRef.current) {
@@ -348,7 +494,7 @@ export default function DailyPage() {
     }
     completionEffectTimeoutRef.current = setTimeout(() => {
       setJustCompletedTaskId("");
-      setJustCompletedCheer(CHEER_MESSAGES[0]);
+      setJustCompletedCheer("");
       completionEffectTimeoutRef.current = null;
     }, 1400);
   }
@@ -371,7 +517,7 @@ export default function DailyPage() {
 
     const result = actions.moveTask(drag.taskId, deltaMinutes);
     if (!result.ok && result.message) {
-      setAlert(result.message);
+      setAlert(localizeActionMessage(result.message, locale, copy));
     } else {
       setAlert("");
       setDrag({ ...drag, startY: event.clientY });
@@ -401,11 +547,11 @@ export default function DailyPage() {
 
   return (
     <AppShell
-      title={viewMeta.title}
-      subtitle={viewMeta.subtitle}
+      title={viewMeta.title[locale]}
+      subtitle={viewMeta.subtitle[locale]}
       goalProgress={state.goalOverall}
-      quote="Plan the day before it starts."
-      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
+      quote={copy.quote}
+      themeLabel={darkMode ? copy.themeLight : copy.themeDark}
       onToggleTheme={actions.toggleTheme}
       hideHero
       mainClassName="main-compact main-daily"
@@ -413,7 +559,7 @@ export default function DailyPage() {
       <section className={`panel daily-timeline-panel${timelineMode !== "month" ? " is-timeline-mode" : ""}`}>
         <div className="panel-head daily-panel-head">
           <div className="daily-head-main">
-            <h3>{viewMeta.panelTitle}</h3>
+            <h3>{viewMeta.panelTitle[locale]}</h3>
             <div className="timeline-progress-card timeline-progress-card-head" aria-live="polite">
               <div
                 className="timeline-progress-donut"
@@ -421,23 +567,25 @@ export default function DailyPage() {
               >
                 <div className="timeline-progress-donut-inner">
                   <strong>{timelineProgress.percent}%</strong>
-                  <span>Xong</span>
+                  <span>{copy.doneShort}</span>
                 </div>
               </div>
               <div className="timeline-progress-meta">
                 <strong>
-                  {timelineProgress.done}/{timelineProgress.total} task
+                  {timelineProgress.done}/{timelineProgress.total} {getTaskWord(locale, timelineProgress.total)}
                 </strong>
                 <span>
                   {timelineProgress.total === 0
-                    ? `Chưa có task ${timelineProgress.scopeLabel}.`
-                    : `Còn ${timelineProgress.remaining} task ${timelineProgress.scopeLabel}.`}
+                    ? `${copy.noTaskInScope} ${scopeLabel}.`
+                    : locale === "en"
+                      ? `${copy.remainingPrefix} ${timelineProgress.remaining} ${getTaskWord(locale, timelineProgress.remaining)} ${scopeLabel}.`
+                      : `${copy.remainingPrefix} ${timelineProgress.remaining} ${copy.taskWord} ${scopeLabel}.`}
                 </span>
               </div>
             </div>
           </div>
           <div className="timeline-head-controls">
-            <div className="timeline-view-toggle" role="tablist" aria-label="Chế độ timeline">
+            <div className="timeline-view-toggle" role="tablist" aria-label={copy.timelineModeAria}>
               {VIEW_OPTIONS.map((option) => (
                 <button
                   key={option.value}
@@ -445,20 +593,20 @@ export default function DailyPage() {
                   className={`timeline-view-btn${timelineMode === option.value ? " active" : ""}`}
                   onClick={() => setTimelineMode(option.value)}
                 >
-                  {option.label}
+                  {option.label[locale]}
                 </button>
               ))}
             </div>
             {timelineMode === "month" ? (
               <div className="month-nav">
                 <button type="button" className="month-nav-btn" onClick={() => handleDateChange(todayISO())}>
-                  Hôm nay
+                  {copy.monthToday}
                 </button>
-                <button type="button" className="month-nav-btn" onClick={() => shiftMonth(-1)} aria-label="Tháng trước">
+                <button type="button" className="month-nav-btn" onClick={() => shiftMonth(-1)} aria-label={copy.monthPrev}>
                   ‹
                 </button>
                 <strong className="month-nav-label">{monthBoard.monthLabel}</strong>
-                <button type="button" className="month-nav-btn" onClick={() => shiftMonth(1)} aria-label="Tháng sau">
+                <button type="button" className="month-nav-btn" onClick={() => shiftMonth(1)} aria-label={copy.monthNext}>
                   ›
                 </button>
               </div>
@@ -468,21 +616,27 @@ export default function DailyPage() {
 
         <form className="grid-form" onSubmit={submitTask}>
           <input type="date" value={form.date} onChange={(event) => handleDateChange(event.target.value)} required />
-          <input type="text" placeholder="Tên task" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required />
+          <input
+            type="text"
+            placeholder={copy.taskPlaceholder}
+            value={form.title}
+            onChange={(event) => setForm({ ...form, title: event.target.value })}
+            required
+          />
           <input type="time" value={form.start} onChange={(event) => setForm({ ...form, start: event.target.value })} required />
           <input type="time" value={form.end} onChange={(event) => setForm({ ...form, end: event.target.value })} required />
           <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
-            <option value="todo">Chưa làm</option>
-            <option value="doing">Đang làm</option>
-            <option value="done">Hoàn thành</option>
+            <option value="todo">{getStatusLabel(locale, "todo")}</option>
+            <option value="doing">{getStatusLabel(locale, "doing")}</option>
+            <option value="done">{getStatusLabel(locale, "done")}</option>
           </select>
           <select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}>
-            <option value="high">Cao</option>
-            <option value="medium">Trung bình</option>
-            <option value="low">Thấp</option>
+            <option value="high">{getPriorityLabel(locale, "high")}</option>
+            <option value="medium">{getPriorityLabel(locale, "medium")}</option>
+            <option value="low">{getPriorityLabel(locale, "low")}</option>
           </select>
           <select value={form.goalId} onChange={(event) => setForm({ ...form, goalId: event.target.value })}>
-            <option value="">Không gắn mục tiêu</option>
+            <option value="">{copy.noGoal}</option>
             {state.goals.map((goal) => (
               <option value={goal.id} key={goal.id}>
                 {goal.title}
@@ -490,15 +644,10 @@ export default function DailyPage() {
             ))}
           </select>
           <button className="btn" type="submit">
-            {editingId ? "Cập nhật task" : "Thêm task"}
+            {editingId ? copy.updateTask : copy.addTask}
           </button>
         </form>
 
-        {editingId ? (
-          <button className="btn-link" type="button" onClick={resetEdit}>
-            Hủy sửa
-          </button>
-        ) : null}
         {alert ? (
           <p className="toast-alert toast-alert-error" role="status" aria-live="polite">
             {alert}
@@ -506,14 +655,14 @@ export default function DailyPage() {
         ) : null}
         <div className="timeline-summary">
           <p className="muted" style={{ marginTop: 8 }}>
-            Đang xem: {rangeLabel}. Double-click vào task để mở sửa nhanh.
+            {copy.viewing}: {rangeLabel}. {copy.quickEditHint}
           </p>
         </div>
 
         {timelineMode === "month" ? (
           <div className="month-table-wrap">
             <div className="month-table-header">
-              {WEEKDAY_SHORT.map((weekday) => (
+              {(WEEKDAY_SHORT_BY_LOCALE[locale] || WEEKDAY_SHORT_BY_LOCALE.vi).map((weekday) => (
                 <div key={weekday} className="month-weekday">
                   {weekday}
                 </div>
@@ -531,7 +680,7 @@ export default function DailyPage() {
                   >
                     <div className="month-cell-top">
                       <strong>{pad2(cell.dayNumber)}</strong>
-                      <span>{tasks.length ? `${tasks.length} task` : ""}</span>
+                      <span>{formatTaskCount(locale, tasks.length)}</span>
                     </div>
                     <div className="month-cell-list">
                       {tasks.map((task) => (
@@ -541,7 +690,7 @@ export default function DailyPage() {
                           className={`month-task-chip priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}`}
                           data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
                           onClick={() => onEdit(task)}
-                          title={`${task.start}-${task.end} | ${task.title} (${statusLabel(task.status)}, ưu tiên ${priorityLabel(task.priority)})`}
+                          title={`${task.start}-${task.end} | ${task.title} (${getStatusLabel(locale, task.status)}, ${copy.priorityWord} ${getPriorityLabel(locale, task.priority)})`}
                         >
                           <span className="month-task-time">{task.start}</span>
                           <span className="month-task-title">{task.title}</span>
@@ -571,7 +720,7 @@ export default function DailyPage() {
                     <div
                       key={item.date}
                       className={`timeline-column-head${item.date === state.today ? " today" : ""}`}
-                      title={formatDisplayDate(item.date)}
+                      title={formatDisplayDate(item.date, locale)}
                     >
                       <strong>{item.label}</strong>
                       <span>{item.subLabel}</span>
@@ -606,7 +755,7 @@ export default function DailyPage() {
                   return (
                     <article
                       key={task.id}
-                      className={`task-card priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}${isCompact ? " compact" : ""}${isTiny ? " tiny" : ""}`}
+                      className={`task-card priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}${isCompact ? " compact" : ""}${isTiny ? " tiny" : ""}${editingId === task.id ? " editing" : ""}`}
                       data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
                       style={getTaskStyle(task, top, height)}
                       onPointerDown={(event) => onDragStart(event, task)}
@@ -618,16 +767,16 @@ export default function DailyPage() {
                             {task.title} · {task.start} - {task.end}
                           </strong>
                           <div className="task-meta-row task-meta-row-tiny">
-                            <span className={`badge task-priority-badge priority-${task.priority}`}>
-                              {priorityLabel(task.priority)}
-                            </span>
-                            <span className="badge task-status-badge">{statusLabel(task.status)}</span>
                             {goalTitle ? (
-                              <span className="badge task-goal-badge" title={goalTitle}>
-                                Mục tiêu: {goalTitle}
+                              <span className="badge task-goal-badge task-goal-badge-tiny" title={`${copy.goalPrefix}: ${goalTitle}`}>
+                                {goalTitle}
                               </span>
                             ) : null}
-                            <label className="task-check tiny" title="Đánh dấu hoàn thành">
+                            <span className={`badge task-priority-badge priority-${task.priority}`}>
+                              {getPriorityLabel(locale, task.priority)}
+                            </span>
+                            <span className="badge task-status-badge">{getStatusLabel(locale, task.status)}</span>
+                            <label className="task-check tiny" title={copy.doneCheckTitle}>
                               <input
                                 type="checkbox"
                                 checked={task.status === "done"}
@@ -636,15 +785,26 @@ export default function DailyPage() {
                             </label>
                             <div className="task-action-buttons">
                               <button className="task-action-btn" type="button" onClick={() => onEdit(task)}>
-                                Sửa
+                                {copy.edit}
                               </button>
                               <button
                                 className="task-action-btn danger"
                                 type="button"
                                 onClick={() => actions.deleteTask(task.id)}
                               >
-                                Xóa
+                                {copy.delete}
                               </button>
+                              {editingId === task.id ? (
+                                <button
+                                  className="task-action-btn task-action-btn-icon task-cancel-edit-btn"
+                                  type="button"
+                                  aria-label={copy.cancelEdit}
+                                  title={copy.cancelEdit}
+                                  onClick={resetEdit}
+                                >
+                                  <Image src={cancelIcon} alt="" width={14} height={14} />
+                                </button>
+                              ) : null}
                             </div>
                           </div>
                         </div>
@@ -652,9 +812,16 @@ export default function DailyPage() {
                         <>
                           <header className="task-head">
                             <strong title={task.title}>{task.title}</strong>
-                            <span className={`badge task-priority-badge priority-${task.priority}`}>
-                              {priorityLabel(task.priority)}
-                            </span>
+                            <div className="task-head-badges">
+                              {goalTitle ? (
+                                <span className="badge task-goal-badge task-goal-badge-head" title={goalTitle}>
+                                  {copy.goalPrefix}: {goalTitle}
+                                </span>
+                              ) : null}
+                              <span className={`badge task-priority-badge priority-${task.priority}`}>
+                                {getPriorityLabel(locale, task.priority)}
+                              </span>
+                            </div>
                           </header>
 
                           <div className="task-meta-row">
@@ -662,12 +829,7 @@ export default function DailyPage() {
                               {task.start} - {task.end}
                             </span>
                             <div className="task-meta-right">
-                              <span className="badge task-status-badge">{statusLabel(task.status)}</span>
-                              {goalTitle ? (
-                                <span className="badge task-goal-badge" title={goalTitle}>
-                                  Mục tiêu: {goalTitle}
-                                </span>
-                              ) : null}
+                              <span className="badge task-status-badge">{getStatusLabel(locale, task.status)}</span>
                             </div>
                           </div>
                         </>
@@ -681,19 +843,30 @@ export default function DailyPage() {
                               checked={task.status === "done"}
                               onChange={(event) => onToggleTaskDone(task.id, event.target.checked)}
                             />
-                            {isCompact ? null : <span>Hoàn thành</span>}
+                            {isCompact ? null : <span>{copy.completedLabel}</span>}
                           </label>
                           <div className="task-action-buttons">
                             <button className="task-action-btn" type="button" onClick={() => onEdit(task)}>
-                              Sửa
+                              {copy.edit}
                             </button>
                             <button
                               className="task-action-btn danger"
                               type="button"
                               onClick={() => actions.deleteTask(task.id)}
                             >
-                              Xóa
+                              {copy.delete}
                             </button>
+                            {editingId === task.id ? (
+                              <button
+                                className="task-action-btn task-action-btn-icon task-cancel-edit-btn"
+                                type="button"
+                                aria-label={copy.cancelEdit}
+                                title={copy.cancelEdit}
+                                onClick={resetEdit}
+                              >
+                                <Image src={cancelIcon} alt="" width={14} height={14} />
+                              </button>
+                            ) : null}
                           </div>
                         </div>
                       ) : null}
@@ -708,5 +881,3 @@ export default function DailyPage() {
     </AppShell>
   );
 }
-
-

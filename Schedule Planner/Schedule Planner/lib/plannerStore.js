@@ -153,12 +153,26 @@ export function saveState(state) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-export function statusLabel(value) {
-  return { todo: "Chưa làm", doing: "Đang làm", done: "Hoàn thành" }[value] || value;
+function localeTag(locale = "vi") {
+  return locale === "en" ? "en-US" : "vi-VN";
 }
 
-export function priorityLabel(value) {
-  return { high: "Cao", medium: "Trung bình", low: "Thấp" }[value] || value;
+export function statusLabel(value, locale = "vi") {
+  const labels = {
+    vi: { todo: "Chưa làm", doing: "Đang làm", done: "Hoàn thành" },
+    en: { todo: "To do", doing: "In progress", done: "Done" },
+  };
+
+  return labels[locale]?.[value] || labels.vi[value] || value;
+}
+
+export function priorityLabel(value, locale = "vi") {
+  const labels = {
+    vi: { high: "Cao", medium: "Trung bình", low: "Thấp" },
+    en: { high: "High", medium: "Medium", low: "Low" },
+  };
+
+  return labels[locale]?.[value] || labels.vi[value] || value;
 }
 
 export function daysRemaining(dateStr) {
@@ -169,8 +183,8 @@ export function daysRemaining(dateStr) {
   return Math.ceil((deadline.getTime() - now.getTime()) / 86400000);
 }
 
-export function formatDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString("vi-VN", {
+export function formatDate(dateStr, locale = "vi") {
+  return new Date(dateStr).toLocaleDateString(localeTag(locale), {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -190,3 +204,4 @@ export function getStats(tasks) {
     totalHours: (totalMinutes / 60).toFixed(1),
   };
 }
+

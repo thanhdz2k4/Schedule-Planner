@@ -1,19 +1,47 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { BarChart, LineChart } from "@/components/SimpleCharts";
 import StatsGrid from "@/components/StatsGrid";
 import { usePlannerData } from "@/hooks/usePlannerData";
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { getStats, taskDurationMinutes } from "@/lib/plannerStore";
 
-const ANALYTICS_OPTIONS = [
-  { value: "day", label: "Ngày" },
-  { value: "month", label: "Tháng" },
-  { value: "year", label: "Năm" },
-];
+const COPY = {
+  vi: {
+    options: { day: "Ngày", month: "Tháng", year: "Năm" },
+    panelTitle: "Bảng Thống Kê Tổng Hợp",
+    panelSub: "Một slider duy nhất cho ngày, tháng và năm",
+    periodAria: "Mốc thống kê",
+    totalTask: "Tổng task",
+    doneTask: "Task hoàn thành",
+    rate: "Tỷ lệ hoàn thành",
+    hours: "Tổng giờ",
+    chartDay: "Ngày: số giờ trong 7 ngày gần nhất",
+    chartMonth: "Tháng: xu hướng năng suất",
+    chartYear: "Năm: so sánh theo tháng",
+  },
+  en: {
+    options: { day: "Day", month: "Month", year: "Year" },
+    panelTitle: "Combined Analytics",
+    panelSub: "One switcher for day, month, and year",
+    periodAria: "Analytics period",
+    totalTask: "Total tasks",
+    doneTask: "Completed tasks",
+    rate: "Completion rate",
+    hours: "Total hours",
+    chartDay: "Day: working hours in the last 7 days",
+    chartMonth: "Month: productivity trend",
+    chartYear: "Year: comparison by month",
+  },
+};
 
-function getDaySeries(tasks) {
+function dateLocale(locale) {
+  return locale === "en" ? "en-US" : "vi-VN";
+}
+
+function getDaySeries(tasks, locale) {
   const now = new Date();
   const labels = [];
   const values = [];
@@ -27,7 +55,7 @@ function getDaySeries(tasks) {
       .reduce((sum, task) => sum + taskDurationMinutes(task), 0);
 
     labels.push(
-      d.toLocaleDateString("vi-VN", {
+      d.toLocaleDateString(dateLocale(locale), {
         day: "2-digit",
         month: "2-digit",
       })
@@ -80,11 +108,22 @@ function getYearSeries(tasks) {
 
 export default function AnalyticsPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
+  const [locale] = useUiLocale();
   const [analyticsView, setAnalyticsView] = useState("day");
+  const copy = COPY[locale] || COPY.vi;
   const tasks = state?.tasks || [];
   const today = state?.today || "";
 
-  const daySeries = useMemo(() => getDaySeries(tasks), [tasks]);
+  const analyticsOptions = useMemo(
+    () => [
+      { value: "day", label: copy.options.day },
+      { value: "month", label: copy.options.month },
+      { value: "year", label: copy.options.year },
+    ],
+    [copy.options.day, copy.options.month, copy.options.year]
+  );
+
+  const daySeries = useMemo(() => getDaySeries(tasks, locale), [tasks, locale]);
   const monthSeries = useMemo(() => getMonthSeries(tasks), [tasks]);
   const yearSeries = useMemo(() => getYearSeries(tasks), [tasks]);
 
@@ -119,22 +158,22 @@ export default function AnalyticsPage() {
   const chartByView = useMemo(
     () => ({
       day: {
-        title: "Ngày: số giờ trong 7 ngày gần nhất",
+        title: copy.chartDay,
         chartType: "bar",
         series: daySeries,
       },
       month: {
-        title: "Tháng: xu hướng năng suất",
+        title: copy.chartMonth,
         chartType: "line",
         series: monthSeries,
       },
       year: {
-        title: "Năm: so sánh theo tháng",
+        title: copy.chartYear,
         chartType: "bar",
         series: yearSeries,
       },
     }),
-    [daySeries, monthSeries, yearSeries]
+    [copy.chartDay, copy.chartMonth, copy.chartYear, daySeries, monthSeries, yearSeries]
   );
 
   const currentChart = chartByView[analyticsView] || chartByView.day;
@@ -147,21 +186,21 @@ export default function AnalyticsPage() {
 
   return (
     <AppShell
-      title="Thống Kê"
-      subtitle="Theo dõi hiệu suất theo ngày, tháng, năm"
-      quote="Measure the rhythm, then optimize it."
+      title={{ vi: "Thống Kê", en: "Analytics" }}
+      subtitle={{ vi: "Theo dõi hiệu suất theo ngày, tháng, năm", en: "Track performance by day, month, and year" }}
+      quote={{ vi: "Đo nhịp độ trước, rồi tối ưu sau.", en: "Measure the rhythm, then optimize it." }}
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
+      themeLabel={darkMode ? { vi: "Chế độ sáng", en: "Light mode" } : { vi: "Chế độ tối", en: "Dark mode" }}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
-          <h3>Bảng Thống Kê Tổng Hợp</h3>
-          <p className="muted">Một slider duy nhất cho ngày, tháng và năm</p>
+          <h3>{copy.panelTitle}</h3>
+          <p className="muted">{copy.panelSub}</p>
         </div>
 
-        <div className="analytics-switcher" role="tablist" aria-label="Mốc thống kê">
-          {ANALYTICS_OPTIONS.map((option) => (
+        <div className="analytics-switcher" role="tablist" aria-label={copy.periodAria}>
+          {analyticsOptions.map((option) => (
             <button
               key={option.value}
               type="button"
@@ -177,10 +216,10 @@ export default function AnalyticsPage() {
 
         <StatsGrid
           items={[
-            { label: "Tổng task", value: currentStats.total },
-            { label: "Task hoàn thành", value: currentStats.done },
-            { label: "Tỷ lệ hoàn thành", value: `${currentStats.rate}%` },
-            { label: "Tổng giờ", value: `${currentStats.totalHours}h` },
+            { label: copy.totalTask, value: currentStats.total },
+            { label: copy.doneTask, value: currentStats.done },
+            { label: copy.rate, value: `${currentStats.rate}%` },
+            { label: copy.hours, value: `${currentStats.totalHours}h` },
           ]}
         />
 
@@ -191,3 +230,4 @@ export default function AnalyticsPage() {
     </AppShell>
   );
 }
+

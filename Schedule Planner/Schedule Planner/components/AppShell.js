@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { clearAuthSession, loadAuthSession, saveAuthSession } from "@/lib/authClient";
+import { useUiLocale } from "@/hooks/useUiLocale";
 import overviewIcon from "@/images/icons8-overview-100.png";
 import timelineIcon from "@/images/icons8-timeline-100.png";
 import goalsIcon from "@/images/icons8-goal-100.png";
@@ -13,12 +14,16 @@ import integrationsIcon from "@/images/telegram.png";
 import agentIcon from "@/images/icons8-agent-100.png";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Dashboard" },
-  { href: "/daily", label: "Daily Plan" },
-  { href: "/goals", label: "Goals" },
-  { href: "/calendar", label: "Calendar" },
-  { href: "/reminders", label: "Reminders", aliases: ["/proactive", "/agent-lab"] },
-  { href: "/integrations", label: "Integrations" },
+  { href: "/", label: { vi: "Bảng điều khiển", en: "Dashboard" } },
+  { href: "/daily", label: { vi: "Kế hoạch ngày", en: "Daily Plan" } },
+  { href: "/goals", label: { vi: "Mục tiêu", en: "Goals" } },
+  { href: "/calendar", label: { vi: "Lịch", en: "Calendar" } },
+  {
+    href: "/reminders",
+    label: { vi: "Nhắc việc", en: "Reminders" },
+    aliases: ["/proactive", "/agent-lab"],
+  },
+  { href: "/integrations", label: { vi: "Kết nối", en: "Integrations" } },
 ];
 
 const NAV_ICON_BY_PATH = {
@@ -31,6 +36,114 @@ const NAV_ICON_BY_PATH = {
 };
 
 const DEFAULT_FORM = { email: "", password: "" };
+
+const COPY = {
+  vi: {
+    brandSub: "Lập kế hoạch · Theo dõi · Cải thiện",
+    weeklyGoal: "Mục tiêu tuần",
+    weeklyGoalSub: "Tiến độ hoàn thành tổng mục tiêu",
+    account: "Tài khoản",
+    loggedIn: "Đã đăng nhập",
+    anonymous: "Ẩn danh",
+    currentPlanSaved: "Lịch hiện tại đang lưu theo tài khoản này.",
+    logout: "Đăng xuất",
+    authTabLabel: "Chế độ tài khoản",
+    login: "Đăng nhập",
+    register: "Đăng ký",
+    passwordPlaceholder: "Mật khẩu (ít nhất 8 ký tự)",
+    authBusy: "Đang xử lý...",
+    createAccount: "Tạo tài khoản",
+    loginToSync: "Đăng nhập để lưu lịch theo tài khoản và dùng lại trên thiết bị khác.",
+    heroKicker: "Schedule Planner",
+    weekSchedule: "Lịch tuần",
+    quoteLabel: "Trích dẫn",
+    fallbackQuote: "Tiến bộ nhỏ mỗi ngày.",
+    language: "Ngôn ngữ",
+    languageAria: "Chuyển ngôn ngữ Việt hoặc Anh",
+    lightMode: "Chế độ sáng",
+    darkMode: "Chế độ tối",
+    authFail: "Không thể xử lý đăng nhập.",
+    invalidSession: "Dữ liệu phiên đăng nhập không hợp lệ.",
+    authConnectedFail: "Không thể kết nối máy chủ.",
+    registerSuccess: "Tạo tài khoản thành công.",
+    loginSuccess: "Đăng nhập thành công.",
+    logoutSuccess: "Đã đăng xuất.",
+  },
+  en: {
+    brandSub: "Plan · Track · Improve",
+    weeklyGoal: "Weekly Goal",
+    weeklyGoalSub: "Overall progress toward goals",
+    account: "Account",
+    loggedIn: "Signed in",
+    anonymous: "Anonymous",
+    currentPlanSaved: "Current planner data is linked to this account.",
+    logout: "Sign out",
+    authTabLabel: "Account mode",
+    login: "Sign in",
+    register: "Register",
+    passwordPlaceholder: "Password (at least 8 characters)",
+    authBusy: "Processing...",
+    createAccount: "Create account",
+    loginToSync: "Sign in to sync planner data across devices.",
+    heroKicker: "Schedule Planner",
+    weekSchedule: "Weekly schedule",
+    quoteLabel: "Quote",
+    fallbackQuote: "Small progress every day.",
+    language: "Language",
+    languageAria: "Switch language between Vietnamese and English",
+    lightMode: "Light mode",
+    darkMode: "Dark mode",
+    authFail: "Cannot process sign-in.",
+    invalidSession: "Invalid session payload.",
+    authConnectedFail: "Cannot connect to server.",
+    registerSuccess: "Account created successfully.",
+    loginSuccess: "Signed in successfully.",
+    logoutSuccess: "Signed out.",
+  },
+};
+
+function localeDateTag(locale) {
+  return locale === "en" ? "en-US" : "vi-VN";
+}
+
+function pickLocalized(value, locale, fallback = "") {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    if (typeof value[locale] === "string") {
+      return value[locale];
+    }
+
+    if (typeof value.vi === "string") {
+      return value.vi;
+    }
+
+    if (typeof value.en === "string") {
+      return value.en;
+    }
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return fallback;
+}
+
+function normalizeApiErrorMessage(message, locale, copy) {
+  if (locale !== "en" || typeof message !== "string") {
+    return message;
+  }
+
+  const mapped = {
+    "Thiếu email hoặc mật khẩu.": "Missing email or password.",
+    "Email không hợp lệ.": "Invalid email format.",
+    "Mật khẩu phải có ít nhất 8 ký tự.": "Password must be at least 8 characters.",
+    "Email đã tồn tại.": "Email already exists.",
+    "Email hoặc mật khẩu không đúng.": "Incorrect email or password.",
+    "Session is invalid.": "Session is invalid.",
+  };
+
+  return mapped[message] || copy.authFail;
+}
 
 async function safeJson(response) {
   try {
@@ -52,23 +165,38 @@ export default function AppShell({
   mainClassName = "",
 }) {
   const pathname = usePathname();
+  const [locale, setLocale] = useUiLocale();
   const [authSession, setAuthSession] = useState(null);
   const [authMode, setAuthMode] = useState("login");
   const [authForm, setAuthForm] = useState(DEFAULT_FORM);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
   const [authInfo, setAuthInfo] = useState("");
+  const copy = COPY[locale] || COPY.vi;
+
+  const localizedTitle = pickLocalized(title, locale);
+  const localizedSubtitle = pickLocalized(subtitle, locale);
+  const localizedQuote = pickLocalized(quote, locale, copy.fallbackQuote);
+  const localizedThemeLabel = pickLocalized(
+    themeLabel,
+    locale,
+    typeof themeLabel === "string" ? themeLabel : copy.darkMode
+  );
 
   useEffect(() => {
     setAuthSession(loadAuthSession());
   }, [pathname]);
 
-  const todayText = new Date().toLocaleDateString("vi-VN", {
-    weekday: "long",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const todayText = useMemo(
+    () =>
+      new Date().toLocaleDateString(localeDateTag(locale), {
+        weekday: "long",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }),
+    [locale]
+  );
 
   async function handleAuthSubmit(event) {
     event.preventDefault();
@@ -90,24 +218,23 @@ export default function AppShell({
 
       const payload = await safeJson(response);
       if (!response.ok) {
-        setAuthError(payload?.message || "Không thể xử lý đăng nhập.");
+        setAuthError(normalizeApiErrorMessage(payload?.message, locale, copy) || copy.authFail);
         return;
       }
 
       if (!payload?.session?.token || !payload?.session?.userId || !payload?.session?.email) {
-        setAuthError("Dữ liệu phiên đăng nhập không hợp lệ.");
+        setAuthError(copy.invalidSession);
         return;
       }
 
       saveAuthSession(payload.session);
       setAuthSession(payload.session);
       setAuthForm(DEFAULT_FORM);
-      setAuthInfo(authMode === "register" ? "Tạo tài khoản thành công." : "Đăng nhập thành công.");
-
+      setAuthInfo(authMode === "register" ? copy.registerSuccess : copy.loginSuccess);
       window.location.reload();
     } catch (error) {
       console.error(error);
-      setAuthError("Không thể kết nối máy chủ.");
+      setAuthError(copy.authConnectedFail);
     } finally {
       setAuthBusy(false);
     }
@@ -117,7 +244,7 @@ export default function AppShell({
     clearAuthSession();
     setAuthSession(null);
     setAuthError("");
-    setAuthInfo("Đã đăng xuất.");
+    setAuthInfo(copy.logoutSuccess);
     window.location.reload();
   }
 
@@ -127,10 +254,24 @@ export default function AppShell({
         <div className="brand-block">
           <span className="brand-dot" />
           <div>
-            <h1>Schedule Planner</h1>
-            <p className="muted">Plan · Track · Improve</p>
+            <h3>Schedule Planner</h3>
+            <p className="muted">{copy.brandSub}</p>
           </div>
         </div>
+
+        <button
+          type="button"
+          className={`lang-switch-btn${locale === "en" ? " is-en" : ""}`}
+          aria-label={copy.languageAria}
+          title={copy.language}
+          onClick={() => setLocale((prev) => (prev === "vi" ? "en" : "vi"))}
+        >
+          <span className="lang-switch-track">
+            <span className="lang-switch-thumb" />
+          </span>
+          <span className="lang-switch-value">{locale.toUpperCase()}</span>
+        </button>
+
         <nav>
           {NAV_ITEMS.map((item) => {
             const iconImage = NAV_ICON_BY_PATH[item.href];
@@ -141,58 +282,55 @@ export default function AppShell({
                 item.aliases.some((alias) => pathname === alias || pathname.startsWith(`${alias}/`)));
 
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={isActive ? "active" : ""}
-              >
+              <Link key={item.href} href={item.href} className={isActive ? "active" : ""}>
                 <span className="nav-link-content">
                   {iconImage ? <Image src={iconImage} alt="" className="nav-link-icon" width={16} height={16} /> : null}
-                  <span className="nav-link-label">{item.label}</span>
+                  <span className="nav-link-label">{pickLocalized(item.label, locale)}</span>
                 </span>
               </Link>
             );
           })}
         </nav>
+
         <div className="sidebar-card">
-          <p>Mục tiêu tuần</p>
+          <p>{copy.weeklyGoal}</p>
           <strong className="goal-value">{goalProgress}%</strong>
           <div className="progress mini">
             <span style={{ width: `${goalProgress}%` }} />
           </div>
-          <small className="muted">Tiến độ hoàn thành tổng mục tiêu</small>
+          <small className="muted">{copy.weeklyGoalSub}</small>
         </div>
 
         <section className="auth-card">
           <div className="auth-head">
-            <p>Tài khoản</p>
-            {authSession ? <span className="auth-state">Đã đăng nhập</span> : <span className="auth-state">Ẩn danh</span>}
+            <p>{copy.account}</p>
+            {authSession ? <span className="auth-state">{copy.loggedIn}</span> : <span className="auth-state">{copy.anonymous}</span>}
           </div>
 
           {authSession ? (
             <>
               <strong className="auth-email">{authSession.email}</strong>
-              <p className="muted auth-note">Lịch hiện tại đang lưu theo tài khoản này.</p>
+              <p className="muted auth-note">{copy.currentPlanSaved}</p>
               <button className="btn auth-action" type="button" onClick={handleLogout}>
-                Đăng xuất
+                {copy.logout}
               </button>
             </>
           ) : (
             <>
-              <div className="auth-tabs" role="tablist" aria-label="Chế độ tài khoản">
+              <div className="auth-tabs" role="tablist" aria-label={copy.authTabLabel}>
                 <button
                   type="button"
                   className={`auth-tab${authMode === "login" ? " active" : ""}`}
                   onClick={() => setAuthMode("login")}
                 >
-                  Đăng nhập
+                  {copy.login}
                 </button>
                 <button
                   type="button"
                   className={`auth-tab${authMode === "register" ? " active" : ""}`}
                   onClick={() => setAuthMode("register")}
                 >
-                  Đăng ký
+                  {copy.register}
                 </button>
               </div>
               <form className="auth-form" onSubmit={handleAuthSubmit}>
@@ -205,17 +343,17 @@ export default function AppShell({
                 />
                 <input
                   type="password"
-                  placeholder="Mật khẩu (ít nhất 8 ký tự)"
+                  placeholder={copy.passwordPlaceholder}
                   minLength={8}
                   value={authForm.password}
                   onChange={(event) => setAuthForm((prev) => ({ ...prev, password: event.target.value }))}
                   required
                 />
                 <button className="btn auth-action" type="submit" disabled={authBusy}>
-                  {authBusy ? "Đang xử lý..." : authMode === "register" ? "Tạo tài khoản" : "Đăng nhập"}
+                  {authBusy ? copy.authBusy : authMode === "register" ? copy.createAccount : copy.login}
                 </button>
               </form>
-              <p className="muted auth-note">Đăng nhập để lưu lịch theo tài khoản và dùng lại trên thiết bị khác.</p>
+              <p className="muted auth-note">{copy.loginToSync}</p>
             </>
           )}
 
@@ -228,19 +366,19 @@ export default function AppShell({
         {!hideHero ? (
           <header className="hero">
             <div className="hero-section">
-              <p className="muted hero-kicker">Schedule Planner</p>
-              <h2>{title}</h2>
-              <p className="muted hero-sub">{subtitle}</p>
+              <p className="muted hero-kicker">{copy.heroKicker}</p>
+              <h2>{localizedTitle}</h2>
+              <p className="muted hero-sub">{localizedSubtitle}</p>
             </div>
             <div className="hero-center hero-section">
-              <h3>Lịch tuần</h3>
+              <h3>{copy.weekSchedule}</h3>
               <p className="hero-meta">{todayText}</p>
             </div>
             <div className="hero-right hero-section">
-              <p className="muted">Trích dẫn</p>
-              <p className="quote">{quote || "Small progress every day."}</p>
+              <p className="muted">{copy.quoteLabel}</p>
+              <p className="quote">{localizedQuote}</p>
               <button className="btn ghost theme-toggle" onClick={onToggleTheme}>
-                {themeLabel}
+                {localizedThemeLabel}
               </button>
             </div>
           </header>
@@ -251,3 +389,4 @@ export default function AppShell({
     </div>
   );
 }
+

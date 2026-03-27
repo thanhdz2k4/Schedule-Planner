@@ -3,8 +3,77 @@
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { usePlannerData } from "@/hooks/usePlannerData";
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { loadAuthSession } from "@/lib/authClient";
 import { daysRemaining, formatDate, priorityLabel, statusLabel } from "@/lib/plannerStore";
+
+const COPY = {
+  vi: {
+    loadSettingsError: "Không thể tải cài đặt nhắc việc.",
+    loadSettingsUnexpected: "Lỗi bất ngờ khi tải cài đặt nhắc việc.",
+    loginBeforeSave: "Vui lòng đăng nhập trước khi cập nhật cài đặt nhắc việc.",
+    invalidLeadTime: "Thời gian nhắc phải là số nguyên >= 0.",
+    saveSettingsError: "Không thể lưu cài đặt nhắc việc.",
+    saveSettingsUnexpected: "Lỗi bất ngờ khi lưu cài đặt nhắc việc.",
+    savedSetting: "Đã lưu cài đặt nhắc việc. Áp dụng cho {count} job nhắc việc đang chờ.",
+    loginBeforeDispatch: "Vui lòng đăng nhập trước khi chạy dispatch nhắc việc.",
+    dispatchError: "Không thể dispatch nhắc việc lúc này.",
+    dispatchUnexpected: "Lỗi bất ngờ khi dispatch nhắc việc.",
+    dispatchDone: "Dispatch xong. quét={scanned}, gửi={sent}, thử lại={retried}, lỗi={failed}.",
+    titleLead: "Thời Gian Nhắc Việc",
+    subLead: "Thiết lập thời gian gửi nhắc việc trước khi task bắt đầu.",
+    seconds: "Giây",
+    minutes: "Phút",
+    saveSetting: "Lưu cài đặt nhắc việc",
+    saving: "Đang lưu...",
+    currentLead: "Thời gian nhắc hiện tại",
+    notSet: "Chưa thiết lập",
+    upcomingTasks: "Task Sắp Đến Hạn",
+    dispatchNow: "Dispatch Reminder Ngay",
+    dispatching: "Đang dispatch...",
+    statusWord: "Trạng thái",
+    noWaitingTask: "Không có task đang chờ.",
+    warningGoals: "Cảnh Báo Mục Tiêu",
+    dayToDeadline: "Còn {days} ngày tới deadline ({date}).",
+    noWarningGoal: "Không có goal cần cảnh báo.",
+  },
+  en: {
+    loadSettingsError: "Cannot load reminder settings.",
+    loadSettingsUnexpected: "Unexpected error while loading reminder settings.",
+    loginBeforeSave: "Please login first before updating reminder settings.",
+    invalidLeadTime: "Lead time must be an integer >= 0.",
+    saveSettingsError: "Cannot save reminder settings.",
+    saveSettingsUnexpected: "Unexpected error while saving reminder settings.",
+    savedSetting: "Reminder setting saved. Applied to {count} pending reminder job(s).",
+    loginBeforeDispatch: "Please login first before dispatching reminders.",
+    dispatchError: "Cannot dispatch reminders right now.",
+    dispatchUnexpected: "Unexpected error while dispatching reminders.",
+    dispatchDone: "Dispatch done. scanned={scanned}, sent={sent}, retried={retried}, failed={failed}.",
+    titleLead: "Reminder Lead Time",
+    subLead: "Set how long before task start the reminder should be sent.",
+    seconds: "Seconds",
+    minutes: "Minutes",
+    saveSetting: "Save Reminder Setting",
+    saving: "Saving...",
+    currentLead: "Current effective lead time",
+    notSet: "Not set yet",
+    upcomingTasks: "Upcoming Tasks",
+    dispatchNow: "Dispatch Reminder Now",
+    dispatching: "Dispatching...",
+    statusWord: "Status",
+    noWaitingTask: "No pending tasks.",
+    warningGoals: "Goal Alerts",
+    dayToDeadline: "{days} day(s) left until deadline ({date}).",
+    noWarningGoal: "No goals in warning state.",
+  },
+};
+
+function withVars(template, vars = {}) {
+  return Object.entries(vars).reduce(
+    (text, [key, value]) => text.replace(new RegExp(`\\{${key}\\}`, "g"), String(value)),
+    template
+  );
+}
 
 async function safeJson(response) {
   try {
@@ -22,29 +91,33 @@ function normalizeLeadValue(value, fallback = "") {
   return String(parsed);
 }
 
-function formatLeadPreview(seconds) {
+function formatLeadPreview(seconds, locale = "vi") {
   if (!Number.isInteger(seconds) || seconds < 0) {
     return "";
   }
 
   if (seconds === 0) {
-    return "0 seconds";
+    return locale === "en" ? "0 seconds" : "0 giây";
   }
 
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
 
   if (minutes > 0 && remainder > 0) {
-    return `${minutes} minute(s) ${remainder} second(s)`;
+    return locale === "en"
+      ? `${minutes} minute(s) ${remainder} second(s)`
+      : `${minutes} phút ${remainder} giây`;
   }
   if (minutes > 0) {
-    return `${minutes} minute(s)`;
+    return locale === "en" ? `${minutes} minute(s)` : `${minutes} phút`;
   }
-  return `${remainder} second(s)`;
+  return locale === "en" ? `${remainder} second(s)` : `${remainder} giây`;
 }
 
 export default function RemindersPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
+  const [locale] = useUiLocale();
+  const copy = COPY[locale] || COPY.vi;
   const [authSession, setAuthSession] = useState(null);
   const [dispatchBusy, setDispatchBusy] = useState(false);
   const [dispatchMessage, setDispatchMessage] = useState("");
@@ -82,7 +155,7 @@ export default function RemindersPage() {
         const payload = await safeJson(response);
         if (!response.ok) {
           if (!cancelled) {
-            setSettingsError(payload?.message || "Cannot load reminder settings.");
+            setSettingsError(payload?.message || copy.loadSettingsError);
           }
           return;
         }
@@ -100,7 +173,7 @@ export default function RemindersPage() {
       } catch (error) {
         console.error(error);
         if (!cancelled) {
-          setSettingsError("Unexpected error while loading reminder settings.");
+          setSettingsError(copy.loadSettingsUnexpected);
         }
       } finally {
         if (!cancelled) {
@@ -117,14 +190,14 @@ export default function RemindersPage() {
 
   async function handleSaveReminderSetting() {
     if (!authSession?.token) {
-      setSettingsError("Please login first before updating reminder settings.");
+      setSettingsError(copy.loginBeforeSave);
       setSettingsMessage("");
       return;
     }
 
     const parsed = Number.parseInt(leadValue, 10);
     if (!Number.isInteger(parsed) || parsed < 0) {
-      setSettingsError("Lead time must be an integer >= 0.");
+      setSettingsError(copy.invalidLeadTime);
       setSettingsMessage("");
       return;
     }
@@ -148,7 +221,7 @@ export default function RemindersPage() {
 
       const payload = await safeJson(response);
       if (!response.ok) {
-        setSettingsError(payload?.message || "Cannot save reminder settings.");
+        setSettingsError(payload?.message || copy.saveSettingsError);
         return;
       }
 
@@ -162,12 +235,10 @@ export default function RemindersPage() {
       setLeadUnit(nextUnit);
       setLeadValue(nextValue);
       setEffectiveLeadSeconds(nextLeadSeconds);
-      setSettingsMessage(
-        `Reminder setting saved. Applied to ${payload?.jobsRebuilt || 0} pending reminder job(s).`
-      );
+      setSettingsMessage(withVars(copy.savedSetting, { count: payload?.jobsRebuilt || 0 }));
     } catch (error) {
       console.error(error);
-      setSettingsError("Unexpected error while saving reminder settings.");
+      setSettingsError(copy.saveSettingsUnexpected);
     } finally {
       setSettingsSaving(false);
     }
@@ -175,7 +246,7 @@ export default function RemindersPage() {
 
   async function handleDispatchNow() {
     if (!authSession?.token) {
-      setDispatchError("Please login first before dispatching reminders.");
+      setDispatchError(copy.loginBeforeDispatch);
       setDispatchMessage("");
       return;
     }
@@ -202,17 +273,22 @@ export default function RemindersPage() {
       }
 
       if (!response.ok) {
-        setDispatchError(payload?.message || "Cannot dispatch reminders right now.");
+        setDispatchError(payload?.message || copy.dispatchError);
         return;
       }
 
       const summary = payload?.summary || {};
       setDispatchMessage(
-        `Dispatch done. scanned=${summary.scanned || 0}, sent=${summary.sent || 0}, retried=${summary.retried || 0}, failed=${summary.failed || 0}.`
+        withVars(copy.dispatchDone, {
+          scanned: summary.scanned || 0,
+          sent: summary.sent || 0,
+          retried: summary.retried || 0,
+          failed: summary.failed || 0,
+        })
       );
     } catch (error) {
       console.error(error);
-      setDispatchError("Unexpected error while dispatching reminders.");
+      setDispatchError(copy.dispatchUnexpected);
     } finally {
       setDispatchBusy(false);
     }
@@ -229,19 +305,19 @@ export default function RemindersPage() {
 
   return (
     <AppShell
-      title="Nhac Viec"
-      subtitle="Nhung task va muc tieu can uu tien ngay"
-      quote="Reminders keep intentions alive."
+      title={{ vi: "Nhắc Việc", en: "Reminders" }}
+      subtitle={{ vi: "Những task và mục tiêu cần ưu tiên ngay", en: "Tasks and goals that need immediate attention" }}
+      quote={{ vi: "Nhắc việc giúp giữ ý định hành động.", en: "Reminders keep intentions alive." }}
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Che do sang" : "Che do toi"}
+      themeLabel={darkMode ? { vi: "Chế độ sáng", en: "Light mode" } : { vi: "Chế độ tối", en: "Dark mode" }}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
-          <h3>Reminder Lead Time</h3>
+          <h3>{copy.titleLead}</h3>
         </div>
         <div className="mini-card">
-          <p className="muted">Set how long before task start the reminder should be sent.</p>
+          <p className="muted">{copy.subLead}</p>
           <div className="grid-form">
             <input
               type="number"
@@ -249,7 +325,7 @@ export default function RemindersPage() {
               step="1"
               value={leadValue}
               onChange={(event) => setLeadValue(event.target.value)}
-              placeholder={leadUnit === "seconds" ? "Seconds" : "Minutes"}
+              placeholder={leadUnit === "seconds" ? copy.seconds : copy.minutes}
               disabled={settingsLoading || settingsSaving}
             />
             <select
@@ -257,8 +333,8 @@ export default function RemindersPage() {
               onChange={(event) => setLeadUnit(event.target.value === "seconds" ? "seconds" : "minutes")}
               disabled={settingsLoading || settingsSaving}
             >
-              <option value="minutes">Minutes</option>
-              <option value="seconds">Seconds</option>
+              <option value="minutes">{copy.minutes}</option>
+              <option value="seconds">{copy.seconds}</option>
             </select>
             <button
               type="button"
@@ -266,11 +342,11 @@ export default function RemindersPage() {
               onClick={handleSaveReminderSetting}
               disabled={settingsLoading || settingsSaving}
             >
-              {settingsSaving ? "Saving..." : "Save Reminder Setting"}
+              {settingsSaving ? copy.saving : copy.saveSetting}
             </button>
           </div>
           <p className="muted">
-            Current effective lead time: {formatLeadPreview(effectiveLeadSeconds) || "Not set yet"}.
+            {copy.currentLead}: {formatLeadPreview(effectiveLeadSeconds, locale) || copy.notSet}.
           </p>
         </div>
       </section>
@@ -278,9 +354,9 @@ export default function RemindersPage() {
       <section className="panel two-col">
         <article>
           <div className="panel-head">
-            <h3>Task Sap Den Han</h3>
+            <h3>{copy.upcomingTasks}</h3>
             <button type="button" className="btn" onClick={handleDispatchNow} disabled={dispatchBusy}>
-              {dispatchBusy ? "Dispatching..." : "Dispatch Reminder Now"}
+              {dispatchBusy ? copy.dispatching : copy.dispatchNow}
             </button>
           </div>
           <div className="reminder-list">
@@ -289,25 +365,25 @@ export default function RemindersPage() {
                 <div className={`mini-card task-item priority-${task.priority}`} key={task.id}>
                   <strong>{task.title}</strong>
                   <div>
-                    {formatDate(task.date)} · {task.start} - {task.end}
+                    {formatDate(task.date, locale)} · {task.start} - {task.end}
                   </div>
                   <div className="muted">
-                    Trang thai: {statusLabel(task.status)}
+                    {copy.statusWord}: {statusLabel(task.status, locale)}
                     <span className={`badge task-priority-pill priority-${task.priority}`}>
-                      {priorityLabel(task.priority)}
+                      {priorityLabel(task.priority, locale)}
                     </span>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="mini-card">Khong co task dang cho.</div>
+              <div className="mini-card">{copy.noWaitingTask}</div>
             )}
           </div>
         </article>
 
         <article>
           <div className="panel-head">
-            <h3>Canh Bao Muc Tieu</h3>
+            <h3>{copy.warningGoals}</h3>
           </div>
           <div className="reminder-list">
             {warningGoals.length ? (
@@ -318,12 +394,15 @@ export default function RemindersPage() {
                     {goal.completed}/{goal.target} · {goal.progress}%
                   </div>
                   <p className="reminder">
-                    Con {daysRemaining(goal.deadline)} ngay toi deadline ({formatDate(goal.deadline)}).
+                    {withVars(copy.dayToDeadline, {
+                      days: daysRemaining(goal.deadline),
+                      date: formatDate(goal.deadline, locale),
+                    })}
                   </p>
                 </div>
               ))
             ) : (
-              <div className="mini-card">Khong co goal canh bao.</div>
+              <div className="mini-card">{copy.noWarningGoal}</div>
             )}
           </div>
         </article>

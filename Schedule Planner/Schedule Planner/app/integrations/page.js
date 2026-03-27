@@ -512,11 +512,14 @@ export default function IntegrationsPage() {
 
   return (
     <AppShell
-      title="Integrations"
-      subtitle="Search, connect, and manage all external apps in one place"
-      quote="Build once, connect everywhere."
+      title={{ vi: "Tích Hợp", en: "Integrations" }}
+      subtitle={{
+        vi: "Tìm kiếm, kết nối và quản lý toàn bộ ứng dụng bên ngoài tại một nơi",
+        en: "Search, connect, and manage all external apps in one place",
+      }}
+      quote={{ vi: "Xây một lần, kết nối mọi nơi.", en: "Build once, connect everywhere." }}
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Che do sang" : "Che do toi"}
+      themeLabel={darkMode ? { vi: "Chế độ sáng", en: "Light mode" } : { vi: "Chế độ tối", en: "Dark mode" }}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">

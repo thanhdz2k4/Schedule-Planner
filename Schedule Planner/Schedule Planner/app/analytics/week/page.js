@@ -1,10 +1,28 @@
-﻿"use client";
+"use client";
 
 import AppShell from "@/components/AppShell";
 import { BarChart } from "@/components/SimpleCharts";
 import StatsGrid from "@/components/StatsGrid";
 import { usePlannerData } from "@/hooks/usePlannerData";
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { getStats, taskDurationMinutes } from "@/lib/plannerStore";
+
+const COPY = {
+  vi: {
+    totalTask: "Tổng task",
+    doneTask: "Task hoàn thành",
+    rate: "Tỷ lệ hoàn thành",
+    hours: "Tổng giờ",
+    chartTitle: "Số giờ làm việc theo ngày",
+  },
+  en: {
+    totalTask: "Total tasks",
+    doneTask: "Completed tasks",
+    rate: "Completion rate",
+    hours: "Total hours",
+    chartTitle: "Working hours by day",
+  },
+};
 
 function weekSeries(tasks) {
   const now = new Date();
@@ -25,6 +43,8 @@ function weekSeries(tasks) {
 
 export default function AnalyticsWeekPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
+  const [locale] = useUiLocale();
+  const copy = COPY[locale] || COPY.vi;
 
   if (!loaded) return null;
 
@@ -44,23 +64,23 @@ export default function AnalyticsWeekPage() {
 
   return (
     <AppShell
-      title="Thống Kê Tuần"
-      subtitle="Hiệu suất làm việc trong 7 ngày gần nhất"
-      quote="Measure what matters every week."
+      title={{ vi: "Thống Kê Tuần", en: "Weekly Analytics" }}
+      subtitle={{ vi: "Hiệu suất làm việc trong 7 ngày gần nhất", en: "Work performance in the last 7 days" }}
+      quote={{ vi: "Đo lường điều quan trọng mỗi tuần.", en: "Measure what matters every week." }}
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
+      themeLabel={darkMode ? { vi: "Chế độ sáng", en: "Light mode" } : { vi: "Chế độ tối", en: "Dark mode" }}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <StatsGrid
           items={[
-            { label: "Tổng task", value: stats.total },
-            { label: "Task hoàn thành", value: stats.done },
-            { label: "Tỷ lệ hoàn thành", value: `${stats.rate}%` },
-            { label: "Tổng giờ", value: `${stats.totalHours}h` },
+            { label: copy.totalTask, value: stats.total },
+            { label: copy.doneTask, value: stats.done },
+            { label: copy.rate, value: `${stats.rate}%` },
+            { label: copy.hours, value: `${stats.totalHours}h` },
           ]}
         />
-        <BarChart title="Số giờ làm việc theo ngày" labels={series.labels} values={series.values} />
+        <BarChart title={copy.chartTitle} labels={series.labels} values={series.values} />
       </section>
     </AppShell>
   );

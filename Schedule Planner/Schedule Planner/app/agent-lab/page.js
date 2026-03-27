@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { formatShortUserId, rotateAnonymousUserId } from "@/lib/anonymousUser";
 import { usePlannerData } from "@/hooks/usePlannerData";
+import { useUiLocale } from "@/hooks/useUiLocale";
 
 const PROVIDERS = [
   { value: "auto", label: "Auto" },
@@ -12,11 +13,86 @@ const PROVIDERS = [
 ];
 
 const RUN_MODES = [
-  { value: "workflow", label: "Route + Execute" },
-  { value: "route", label: "Route only" },
+  { value: "workflow", label: { vi: "Định tuyến + Thực thi", en: "Route + Execute" } },
+  { value: "route", label: { vi: "Chỉ định tuyến", en: "Route only" } },
 ];
 
-function resultSummary(result, runMode) {
+const COPY = {
+  vi: {
+    needMoreInfo: "Cần bổ sung thêm thông tin.",
+    workflowFailed: "Workflow không thể chạy.",
+    callRouterFailed: "Không thể gọi router.",
+    routerErrorHint: "Router bị lỗi, xem chi tiết ở cảnh báo bên trên.",
+    title: "Phòng Thí Nghiệm Agent",
+    subtitle: "Test intern-router nhiều lượt trực tiếp trên web",
+    quote: "Phản hồi nhanh luôn tốt hơn giả định.",
+    panelTitle: "Chat Router Test",
+    panelSub: "Mỗi browser có 1 anonymous user id để tách dữ liệu.",
+    userLabel: "User",
+    resetContext: "Reset context",
+    switchTestUser: "Đổi user test",
+    promptPlaceholder: "Ví dụ: Tạo task họp sprint hôm nay 9 giờ sáng",
+    sending: "Đang gửi...",
+    sendRouter: "Gửi router",
+    conversation: "Hội thoại",
+    you: "Bạn",
+    router: "Router",
+    emptyConversation: "Chưa có hội thoại. Gửi câu đầu tiên để bắt đầu.",
+    latestJson: "Kết quả JSON mới nhất",
+    noResponse: "Chưa có response.",
+    intent: "Intent",
+    confidence: "Độ tin cậy",
+    themeLight: "Chế độ sáng",
+    themeDark: "Chế độ tối",
+  },
+  en: {
+    needMoreInfo: "More details are needed.",
+    workflowFailed: "Workflow cannot run.",
+    callRouterFailed: "Cannot call router.",
+    routerErrorHint: "Router failed. See the alert above for details.",
+    title: "Agent Lab",
+    subtitle: "Test intern-router multi-turn directly on web",
+    quote: "Fast feedback beats assumptions.",
+    panelTitle: "Chat Router Test",
+    panelSub: "Each browser has one anonymous user id to isolate data.",
+    userLabel: "User",
+    resetContext: "Reset context",
+    switchTestUser: "Switch test user",
+    promptPlaceholder: "Example: Create a sprint meeting task today at 9 AM",
+    sending: "Sending...",
+    sendRouter: "Send router",
+    conversation: "Conversation",
+    you: "You",
+    router: "Router",
+    emptyConversation: "No conversation yet. Send the first prompt to start.",
+    latestJson: "Latest JSON result",
+    noResponse: "No response yet.",
+    intent: "Intent",
+    confidence: "Confidence",
+    themeLight: "Light mode",
+    themeDark: "Dark mode",
+  },
+};
+
+function pickLocalized(value, locale) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    if (typeof value[locale] === "string") {
+      return value[locale];
+    }
+
+    if (typeof value.vi === "string") {
+      return value.vi;
+    }
+
+    if (typeof value.en === "string") {
+      return value.en;
+    }
+  }
+
+  return typeof value === "string" ? value : "";
+}
+
+function resultSummary(result, runMode, copy) {
   if (!result) return "";
 
   if (runMode === "workflow") {
@@ -24,20 +100,23 @@ function resultSummary(result, runMode) {
       return result.execution.result.message;
     }
     if (!result.ok && result.stage === "routing") {
-      return result.message || result.route?.clarifying_question || "Cần bổ sung thêm thông tin.";
+      return result.message || result.route?.clarifying_question || copy.needMoreInfo;
     }
-    return result.execution?.error?.message || "Workflow không thể chạy.";
+    return result.execution?.error?.message || copy.workflowFailed;
   }
 
   if (result.need_clarification) {
-    return result.clarifying_question || "Cần bổ sung thêm thông tin.";
+    return result.clarifying_question || copy.needMoreInfo;
   }
 
-  return `Intent: ${result.intent} · Confidence: ${Math.round((result.confidence || 0) * 100)}%`;
+  return `${copy.intent}: ${result.intent} · ${copy.confidence}: ${Math.round((result.confidence || 0) * 100)}%`;
 }
 
 export default function AgentLabPage() {
   const { loaded, darkMode, userId, state, actions } = usePlannerData();
+  const [locale] = useUiLocale();
+  const copy = COPY[locale] || COPY.vi;
+
   const [runMode, setRunMode] = useState("workflow");
   const [provider, setProvider] = useState("auto");
   const [text, setText] = useState("");
@@ -45,6 +124,15 @@ export default function AgentLabPage() {
   const [error, setError] = useState("");
   const [context, setContext] = useState(null);
   const [history, setHistory] = useState([]);
+
+  const runModeOptions = useMemo(
+    () =>
+      RUN_MODES.map((item) => ({
+        value: item.value,
+        label: pickLocalized(item.label, locale),
+      })),
+    [locale]
+  );
 
   const shortUserId = useMemo(() => formatShortUserId(userId), [userId]);
   const latestResult = useMemo(() => {
@@ -88,7 +176,7 @@ export default function AgentLabPage() {
 
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload?.message || "Không thể gọi router.");
+        throw new Error(payload?.message || copy.callRouterFailed);
       }
 
       const nextContext = payload?.context_for_next_turn || payload?.route?.context_for_next_turn || null;
@@ -98,7 +186,7 @@ export default function AgentLabPage() {
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: resultSummary(payload, runMode),
+          text: resultSummary(payload, runMode, copy),
           result: payload,
         },
       ]);
@@ -109,7 +197,7 @@ export default function AgentLabPage() {
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: "Router bị lỗi, xem chi tiết ở alert bên trên.",
+          text: copy.routerErrorHint,
         },
       ]);
     } finally {
@@ -130,46 +218,58 @@ export default function AgentLabPage() {
 
   return (
     <AppShell
-      title="Agent Lab"
-      subtitle="Test intern-router nhiều lượt trực tiếp trên web"
-      quote="Fast feedback beats assumptions."
+      title={{ vi: copy.title, en: "Agent Lab" }}
+      subtitle={{ vi: copy.subtitle, en: "Test intern-router multi-turn directly on web" }}
+      quote={{ vi: copy.quote, en: "Fast feedback beats assumptions." }}
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
+      themeLabel={darkMode ? { vi: copy.themeLight, en: "Light mode" } : { vi: copy.themeDark, en: "Dark mode" }}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
           <div>
-            <h3>Chat Router Test</h3>
-            <p className="muted">Mỗi browser có 1 anonymous user id để tách dữ liệu.</p>
+            <h3>{copy.panelTitle}</h3>
+            <p className="muted">{copy.panelSub}</p>
           </div>
-          <span className="badge">User: {shortUserId}</span>
+          <span className="badge">
+            {copy.userLabel}: {shortUserId}
+          </span>
         </div>
 
         <div className="agent-toolbar">
-          <button type="button" className="btn ghost" onClick={resetConversation}>Reset context</button>
-          <button type="button" className="btn ghost" onClick={switchAnonymousIdentity}>Đổi user test</button>
+          <button type="button" className="btn ghost" onClick={resetConversation}>
+            {copy.resetContext}
+          </button>
+          <button type="button" className="btn ghost" onClick={switchAnonymousIdentity}>
+            {copy.switchTestUser}
+          </button>
         </div>
 
         <form className="agent-form" onSubmit={submitPrompt}>
           <select value={runMode} onChange={(event) => setRunMode(event.target.value)}>
-            {RUN_MODES.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
+            {runModeOptions.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
             ))}
           </select>
           <select value={provider} onChange={(event) => setProvider(event.target.value)}>
             {PROVIDERS.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
             ))}
           </select>
           <textarea
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="Ví dụ: Tạo task họp sprint hôm nay 9 giờ sáng"
+            placeholder={copy.promptPlaceholder}
             rows={3}
             required
           />
-          <button type="submit" className="btn" disabled={busy}>{busy ? "Đang gửi..." : "Gửi router"}</button>
+          <button type="submit" className="btn" disabled={busy}>
+            {busy ? copy.sending : copy.sendRouter}
+          </button>
         </form>
 
         {error ? <p className="alert">{error}</p> : null}
@@ -178,7 +278,7 @@ export default function AgentLabPage() {
       <section className="panel two-col">
         <article>
           <div className="panel-head">
-            <h3>Hội thoại</h3>
+            <h3>{copy.conversation}</h3>
           </div>
           <div className="agent-history">
             {history.length ? (
@@ -187,28 +287,27 @@ export default function AgentLabPage() {
                   key={item.id}
                   className={`agent-bubble ${item.role === "user" ? "agent-bubble-user" : "agent-bubble-assistant"}`}
                 >
-                  <p className="muted">{item.role === "user" ? "Bạn" : "Router"}</p>
+                  <p className="muted">{item.role === "user" ? copy.you : copy.router}</p>
                   <p>{item.text}</p>
                 </div>
               ))
             ) : (
-              <div className="mini-card">Chưa có hội thoại. Gửi câu đầu tiên để bắt đầu.</div>
+              <div className="mini-card">{copy.emptyConversation}</div>
             )}
           </div>
         </article>
 
         <article>
           <div className="panel-head">
-            <h3>Kết quả JSON mới nhất</h3>
+            <h3>{copy.latestJson}</h3>
           </div>
           {latestResult ? (
             <pre className="agent-json">{JSON.stringify(latestResult, null, 2)}</pre>
           ) : (
-            <div className="mini-card">Chưa có response.</div>
+            <div className="mini-card">{copy.noResponse}</div>
           )}
         </article>
       </section>
     </AppShell>
   );
 }
-

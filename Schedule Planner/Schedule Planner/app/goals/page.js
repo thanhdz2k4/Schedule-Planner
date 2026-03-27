@@ -1,13 +1,43 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
 import { usePlannerData } from "@/hooks/usePlannerData";
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { daysRemaining, formatDate } from "@/lib/plannerStore";
+
+const COPY = {
+  vi: {
+    createTitle: "Tạo Mục Tiêu Mới",
+    createSub: "Task hoàn thành sẽ tự cộng vào mục tiêu đã liên kết",
+    goalName: "Tên mục tiêu",
+    goalTarget: "Số lượng cần đạt",
+    addGoal: "Thêm mục tiêu",
+    deadline: "Hạn chót",
+    progress: "Tiến độ",
+    warning: "Nhắc nhở: gần hết tuần nhưng mục tiêu chưa đạt.",
+    delete: "Xóa mục tiêu",
+    empty: "Chưa có mục tiêu nào.",
+  },
+  en: {
+    createTitle: "Create New Goal",
+    createSub: "Completed tasks will automatically count toward linked goals",
+    goalName: "Goal title",
+    goalTarget: "Target amount",
+    addGoal: "Add goal",
+    deadline: "Deadline",
+    progress: "Progress",
+    warning: "Reminder: week is ending but this goal is not completed.",
+    delete: "Delete goal",
+    empty: "No goals yet.",
+  },
+};
 
 export default function GoalsPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
+  const [locale] = useUiLocale();
   const [form, setForm] = useState({ title: "", target: 1, deadline: "" });
+  const copy = COPY[locale] || COPY.vi;
 
   if (!loaded) {
     return null;
@@ -30,23 +60,23 @@ export default function GoalsPage() {
 
   return (
     <AppShell
-      title="Mục Tiêu Tuần"
-      subtitle="Theo dõi tiến độ và mức độ hoàn thành"
-      quote="Goals turn plans into measurable outcomes."
+      title={{ vi: "Mục Tiêu Tuần", en: "Weekly Goals" }}
+      subtitle={{ vi: "Theo dõi tiến độ và mức độ hoàn thành", en: "Track progress and completion level" }}
+      quote={{ vi: "Mục tiêu biến kế hoạch thành kết quả đo lường được.", en: "Goals turn plans into measurable outcomes." }}
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
+      themeLabel={darkMode ? { vi: "Chế độ sáng", en: "Light mode" } : { vi: "Chế độ tối", en: "Dark mode" }}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
-          <h3>Tạo Mục Tiêu Mới</h3>
-          <p className="muted">Task hoàn thành sẽ tự cộng vào mục tiêu đã liên kết</p>
+          <h3>{copy.createTitle}</h3>
+          <p className="muted">{copy.createSub}</p>
         </div>
 
         <form className="grid-form" onSubmit={submitGoal}>
           <input
             type="text"
-            placeholder="Tên mục tiêu"
+            placeholder={copy.goalName}
             value={form.title}
             onChange={(event) => setForm({ ...form, title: event.target.value })}
             required
@@ -54,7 +84,7 @@ export default function GoalsPage() {
           <input
             type="number"
             min="1"
-            placeholder="Số lượng cần đạt"
+            placeholder={copy.goalTarget}
             value={form.target}
             onChange={(event) => setForm({ ...form, target: event.target.value })}
             required
@@ -65,7 +95,9 @@ export default function GoalsPage() {
             onChange={(event) => setForm({ ...form, deadline: event.target.value })}
             required
           />
-          <button className="btn" type="submit">Thêm mục tiêu</button>
+          <button className="btn" type="submit">
+            {copy.addGoal}
+          </button>
         </form>
 
         <div className="goal-list">
@@ -74,20 +106,26 @@ export default function GoalsPage() {
               <article className="goal-card" key={goal.id}>
                 <div className="goal-row">
                   <strong>{goal.title}</strong>
-                  <span>{goal.completed}/{goal.target}</span>
+                  <span>
+                    {goal.completed}/{goal.target}
+                  </span>
                 </div>
-                <div className="progress"><span style={{ width: `${goal.progress}%` }} /></div>
-                <p className="muted">Hạn chót: {formatDate(goal.deadline)} · Tiến độ: {goal.progress}%</p>
+                <div className="progress">
+                  <span style={{ width: `${goal.progress}%` }} />
+                </div>
+                <p className="muted">
+                  {copy.deadline}: {formatDate(goal.deadline, locale)} · {copy.progress}: {goal.progress}%
+                </p>
                 {daysRemaining(goal.deadline) <= 2 && goal.progress < 100 ? (
-                  <p className="reminder">Nhắc nhở: gần hết tuần nhưng mục tiêu chưa đạt.</p>
+                  <p className="reminder">{copy.warning}</p>
                 ) : null}
                 <button className="btn-link" type="button" onClick={() => actions.deleteGoal(goal.id)}>
-                  Xóa mục tiêu
+                  {copy.delete}
                 </button>
               </article>
             ))
           ) : (
-            <div className="mini-card">Chưa có mục tiêu nào.</div>
+            <div className="mini-card">{copy.empty}</div>
           )}
         </div>
       </section>

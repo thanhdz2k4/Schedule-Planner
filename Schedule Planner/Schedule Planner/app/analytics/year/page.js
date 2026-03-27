@@ -1,10 +1,28 @@
-﻿"use client";
+"use client";
 
 import AppShell from "@/components/AppShell";
 import { BarChart } from "@/components/SimpleCharts";
 import StatsGrid from "@/components/StatsGrid";
 import { usePlannerData } from "@/hooks/usePlannerData";
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { getStats, taskDurationMinutes } from "@/lib/plannerStore";
+
+const COPY = {
+  vi: {
+    totalTask: "Tổng task",
+    doneTask: "Task hoàn thành",
+    totalHours: "Tổng giờ",
+    topMonth: "Tháng nổi bật",
+    chartTitle: "Số giờ làm việc theo tháng",
+  },
+  en: {
+    totalTask: "Total tasks",
+    doneTask: "Completed tasks",
+    totalHours: "Total hours",
+    topMonth: "Top month",
+    chartTitle: "Working hours by month",
+  },
+};
 
 function yearSeries(tasks) {
   const year = new Date().getFullYear();
@@ -26,6 +44,8 @@ function yearSeries(tasks) {
 
 export default function AnalyticsYearPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
+  const [locale] = useUiLocale();
+  const copy = COPY[locale] || COPY.vi;
   if (!loaded) return null;
 
   const thisYear = new Date().getFullYear();
@@ -37,26 +57,26 @@ export default function AnalyticsYearPage() {
 
   return (
     <AppShell
-      title="Thống Kê Năm"
-      subtitle="So sánh hiệu suất theo tháng"
-      quote="Review yearly trends, then adjust weekly."
+      title={{ vi: "Thống Kê Năm", en: "Yearly Analytics" }}
+      subtitle={{ vi: "So sánh hiệu suất theo tháng", en: "Compare performance by month" }}
+      quote={{ vi: "Xem xu hướng năm rồi điều chỉnh theo tuần.", en: "Review yearly trends, then adjust weekly." }}
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
+      themeLabel={darkMode ? { vi: "Chế độ sáng", en: "Light mode" } : { vi: "Chế độ tối", en: "Dark mode" }}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <StatsGrid
           items={[
-            { label: "Tổng task", value: stats.total },
-            { label: "Task hoàn thành", value: stats.done },
-            { label: "Tổng giờ", value: `${stats.totalHours}h` },
+            { label: copy.totalTask, value: stats.total },
+            { label: copy.doneTask, value: stats.done },
+            { label: copy.totalHours, value: `${stats.totalHours}h` },
             {
-              label: "Tháng nổi bật",
+              label: copy.topMonth,
               value: series.values[bestMonthIndex] > 0 ? series.labels[bestMonthIndex] : "--",
             },
           ]}
         />
-        <BarChart title="Số giờ làm việc theo tháng" labels={series.labels} values={series.values} />
+        <BarChart title={copy.chartTitle} labels={series.labels} values={series.values} />
       </section>
     </AppShell>
   );

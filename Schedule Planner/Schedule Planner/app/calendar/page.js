@@ -3,18 +3,55 @@
 import { useMemo } from "react";
 import AppShell from "@/components/AppShell";
 import { usePlannerData } from "@/hooks/usePlannerData";
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { priorityLabel, statusLabel } from "@/lib/plannerStore";
 
-const WEEKDAY_LABELS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+const WEEKDAY_LABELS = {
+  vi: ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
+  en: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+};
 
-function buildMonthCells(now = new Date()) {
+const COPY = {
+  vi: {
+    monthBoard: "Lịch Công Việc",
+    hoverHint: "Hover vào ô ngày để xem toàn bộ task",
+    today: "Hôm nay",
+    done: "xong",
+    remaining: "còn lại",
+    highPriority: "Ưu tiên cao",
+    moreTask: "task khác",
+    dayTaskList: "Danh sách task ngày",
+    goalPrefix: "Mục tiêu",
+    emptyDay: "Trống",
+    taskWord: "task",
+  },
+  en: {
+    monthBoard: "Work Calendar",
+    hoverHint: "Hover a day cell to view all tasks",
+    today: "Today",
+    done: "done",
+    remaining: "remaining",
+    highPriority: "High priority",
+    moreTask: "more tasks",
+    dayTaskList: "Task list for day",
+    goalPrefix: "Goal",
+    emptyDay: "Empty",
+    taskWord: "tasks",
+  },
+};
+
+function dateLocale(locale) {
+  return locale === "en" ? "en-US" : "vi-VN";
+}
+
+function buildMonthCells(locale, now = new Date()) {
   const year = now.getFullYear();
   const month = now.getMonth();
   const firstDay = new Date(year, month, 1);
   const leadingEmptyCount = (firstDay.getDay() + 6) % 7;
   const dayCount = new Date(year, month + 1, 0).getDate();
   const today = now.toISOString().slice(0, 10);
-  const monthLabel = now.toLocaleDateString("vi-VN", {
+  const monthLabel = now.toLocaleDateString(dateLocale(locale), {
     month: "long",
     year: "numeric",
   });
@@ -51,7 +88,9 @@ function buildMonthCells(now = new Date()) {
 
 export default function CalendarPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
-  const { cells, today, monthLabel } = useMemo(() => buildMonthCells(), []);
+  const [locale] = useUiLocale();
+  const copy = COPY[locale] || COPY.vi;
+  const { cells, today, monthLabel } = useMemo(() => buildMonthCells(locale), [locale]);
   const goalTitleById = useMemo(
     () => new Map(state.goals.map((goal) => [goal.id, goal.title])),
     [state.goals]
@@ -61,21 +100,23 @@ export default function CalendarPage() {
 
   return (
     <AppShell
-      title="Lịch Tháng"
-      subtitle="Tổng quan task theo từng ngày trong tháng"
-      quote="Visualize your workload distribution."
+      title={{ vi: "Lịch Tháng", en: "Monthly Calendar" }}
+      subtitle={{ vi: "Tổng quan task theo từng ngày trong tháng", en: "Monthly overview of tasks by day" }}
+      quote={{ vi: "Trực quan hóa phân bổ khối lượng công việc.", en: "Visualize your workload distribution." }}
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
+      themeLabel={darkMode ? { vi: "Chế độ sáng", en: "Light mode" } : { vi: "Chế độ tối", en: "Dark mode" }}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
-          <h3>Lịch Công Việc · {monthLabel}</h3>
-          <p className="muted">Hover vào ô ngày để xem toàn bộ task</p>
+          <h3>
+            {copy.monthBoard} · {monthLabel}
+          </h3>
+          <p className="muted">{copy.hoverHint}</p>
         </div>
 
         <div className="calendar-weekdays">
-          {WEEKDAY_LABELS.map((label) => (
+          {(WEEKDAY_LABELS[locale] || WEEKDAY_LABELS.vi).map((label) => (
             <div key={label} className="weekday-cell">
               {label}
             </div>
@@ -106,28 +147,46 @@ export default function CalendarPage() {
               >
                 <div className="day-cell-head">
                   <strong>{cell.day}</strong>
-                  {isToday ? <span className="badge">Hôm nay</span> : null}
+                  {isToday ? <span className="badge">{copy.today}</span> : null}
                 </div>
 
                 {tasks.length ? (
                   <>
                     <div className="day-stats">
-                      <span>{tasks.length} task</span>
-                      <span>{doneCount} xong</span>
-                      <span>{openCount} còn lại</span>
+                      <span>
+                        {tasks.length} {copy.taskWord}
+                      </span>
+                      <span>
+                        {doneCount} {copy.done}
+                      </span>
+                      <span>
+                        {openCount} {copy.remaining}
+                      </span>
                     </div>
-                    {highCount > 0 ? <p className="day-high">Ưu tiên cao: {highCount}</p> : null}
+                    {highCount > 0 ? (
+                      <p className="day-high">
+                        {copy.highPriority}: {highCount}
+                      </p>
+                    ) : null}
                     {preview.map((task) => (
                       <div className={`badge task-chip priority-${task.priority}`} key={task.id}>
                         {task.start} · {task.title}
                       </div>
                     ))}
-                    {hiddenCount > 0 ? <div className="badge day-more-chip">+{hiddenCount} task khác</div> : null}
+                    {hiddenCount > 0 ? (
+                      <div className="badge day-more-chip">
+                        +{hiddenCount} {copy.moreTask}
+                      </div>
+                    ) : null}
 
                     <div className="day-hover-panel">
                       <div className="day-hover-head">
-                        <strong>Danh sách task ngày {cell.day}</strong>
-                        <span className="badge">{tasks.length} task</span>
+                        <strong>
+                          {copy.dayTaskList} {cell.day}
+                        </strong>
+                        <span className="badge">
+                          {tasks.length} {copy.taskWord}
+                        </span>
                       </div>
                       <div className="day-hover-list">
                         {tasks.map((task) => {
@@ -142,12 +201,12 @@ export default function CalendarPage() {
                               </div>
                               <div className="day-hover-meta">
                                 <span className={`badge task-chip priority-${task.priority}`}>
-                                  {priorityLabel(task.priority)}
+                                  {priorityLabel(task.priority, locale)}
                                 </span>
-                                <span className="badge">{statusLabel(task.status)}</span>
+                                <span className="badge">{statusLabel(task.status, locale)}</span>
                                 {goalTitle ? (
                                   <span className="badge day-hover-goal" title={goalTitle}>
-                                    Mục tiêu: {goalTitle}
+                                    {copy.goalPrefix}: {goalTitle}
                                   </span>
                                 ) : null}
                               </div>
@@ -158,7 +217,7 @@ export default function CalendarPage() {
                     </div>
                   </>
                 ) : (
-                  <p className="muted">Trống</p>
+                  <p className="muted">{copy.emptyDay}</p>
                 )}
               </article>
             );

@@ -1,19 +1,59 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { BarChart, LineChart } from "@/components/SimpleCharts";
 import StatsGrid from "@/components/StatsGrid";
 import { usePlannerData } from "@/hooks/usePlannerData";
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { daysRemaining, formatDate, getStats, priorityLabel, statusLabel, taskDurationMinutes } from "@/lib/plannerStore";
 
-const ANALYTICS_OPTIONS = [
-  { value: "day", label: "Ngày" },
-  { value: "month", label: "Tháng" },
-  { value: "year", label: "Năm" },
-];
+const COPY = {
+  vi: {
+    options: { day: "Ngày", month: "Tháng", year: "Năm" },
+    chartDay: "Ngày: số giờ trong 7 ngày gần nhất",
+    chartMonth: "Tháng: xu hướng năng suất",
+    chartYear: "Năm: so sánh theo tháng",
+    statsTitle: "Tổng Quan Số Liệu",
+    statsSub: "Theo dõi nhanh tiến độ và thời lượng làm việc",
+    statsAria: "Mốc thống kê",
+    totalTask: "Tổng task",
+    doneTask: "Task hoàn thành",
+    doneRate: "Tỷ lệ hoàn thành",
+    totalHours: "Tổng giờ",
+    todayTask: "Task hôm nay",
+    noTodayTask: "Chưa có task hôm nay.",
+    weeklyGoals: "Mục Tiêu Tuần",
+    deadline: "Hạn chót",
+    weekWarning: "Sắp hết tuần nhưng mục tiêu chưa đạt.",
+    noGoals: "Chưa có mục tiêu tuần.",
+  },
+  en: {
+    options: { day: "Day", month: "Month", year: "Year" },
+    chartDay: "Day: working hours in the last 7 days",
+    chartMonth: "Month: productivity trend",
+    chartYear: "Year: comparison by month",
+    statsTitle: "Overview Stats",
+    statsSub: "Quickly track progress and working time",
+    statsAria: "Analytics period",
+    totalTask: "Total tasks",
+    doneTask: "Completed tasks",
+    doneRate: "Completion rate",
+    totalHours: "Total hours",
+    todayTask: "Today tasks",
+    noTodayTask: "No task for today.",
+    weeklyGoals: "Weekly goals",
+    deadline: "Deadline",
+    weekWarning: "Week is ending but goal is not completed yet.",
+    noGoals: "No weekly goals yet.",
+  },
+};
 
-function getDaySeries(tasks) {
+function dateLocale(locale) {
+  return locale === "en" ? "en-US" : "vi-VN";
+}
+
+function getDaySeries(tasks, locale) {
   const now = new Date();
   const labels = [];
   const values = [];
@@ -27,7 +67,7 @@ function getDaySeries(tasks) {
       .reduce((sum, task) => sum + taskDurationMinutes(task), 0);
 
     labels.push(
-      d.toLocaleDateString("vi-VN", {
+      d.toLocaleDateString(dateLocale(locale), {
         day: "2-digit",
         month: "2-digit",
       })
@@ -80,34 +120,45 @@ function getYearSeries(tasks) {
 
 export default function DashboardPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
+  const [locale] = useUiLocale();
   const [analyticsView, setAnalyticsView] = useState("day");
+  const copy = COPY[locale] || COPY.vi;
   const tasks = state?.tasks || [];
   const goals = state?.goals || [];
   const today = state?.today || "";
 
+  const analyticsOptions = useMemo(
+    () => [
+      { value: "day", label: copy.options.day },
+      { value: "month", label: copy.options.month },
+      { value: "year", label: copy.options.year },
+    ],
+    [copy.options.day, copy.options.month, copy.options.year]
+  );
+
   const stats = getStats(tasks);
-  const day = useMemo(() => getDaySeries(tasks), [tasks]);
+  const day = useMemo(() => getDaySeries(tasks, locale), [tasks, locale]);
   const month = useMemo(() => getMonthSeries(tasks), [tasks]);
   const year = useMemo(() => getYearSeries(tasks), [tasks]);
   const chartByView = useMemo(
     () => ({
       day: {
-        title: "Ngày: số giờ trong 7 ngày gần nhất",
+        title: copy.chartDay,
         chartType: "bar",
         series: day,
       },
       month: {
-        title: "Tháng: xu hướng năng suất",
+        title: copy.chartMonth,
         chartType: "line",
         series: month,
       },
       year: {
-        title: "Năm: so sánh theo tháng",
+        title: copy.chartYear,
         chartType: "bar",
         series: year,
       },
     }),
-    [day, month, year]
+    [copy.chartDay, copy.chartMonth, copy.chartYear, day, month, year]
   );
   const currentChart = chartByView[analyticsView] || chartByView.day;
   const SelectedChart = currentChart.chartType === "line" ? LineChart : BarChart;
@@ -119,29 +170,32 @@ export default function DashboardPage() {
 
   return (
     <AppShell
-      title="Bảng Điều Khiển"
-      subtitle="Toàn cảnh hiệu suất theo ngày, tháng, năm"
-      quote="Build consistency, not pressure."
+      title={{ vi: "Bảng Điều Khiển", en: "Dashboard" }}
+      subtitle={{
+        vi: "Toàn cảnh hiệu suất theo ngày, tháng, năm",
+        en: "Performance overview by day, month, and year",
+      }}
+      quote={{ vi: "Xây sự đều đặn, không tạo áp lực.", en: "Build consistency, not pressure." }}
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
+      themeLabel={darkMode ? { vi: "Chế độ sáng", en: "Light mode" } : { vi: "Chế độ tối", en: "Dark mode" }}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
-          <h3>Tổng Quan Số Liệu</h3>
-          <p className="muted">Theo dõi nhanh tiến độ và thời lượng làm việc</p>
+          <h3>{copy.statsTitle}</h3>
+          <p className="muted">{copy.statsSub}</p>
         </div>
         <StatsGrid
           items={[
-            { label: "Tổng task", value: stats.total },
-            { label: "Task hoàn thành", value: stats.done },
-            { label: "Tỷ lệ hoàn thành", value: `${stats.rate}%` },
-            { label: "Tổng giờ", value: `${stats.totalHours}h` },
+            { label: copy.totalTask, value: stats.total },
+            { label: copy.doneTask, value: stats.done },
+            { label: copy.doneRate, value: `${stats.rate}%` },
+            { label: copy.totalHours, value: `${stats.totalHours}h` },
           ]}
         />
 
-        <div className="analytics-switcher" role="tablist" aria-label="Mốc thống kê">
-          {ANALYTICS_OPTIONS.map((option) => (
+        <div className="analytics-switcher" role="tablist" aria-label={copy.statsAria}>
+          {analyticsOptions.map((option) => (
             <button
               key={option.value}
               type="button"
@@ -163,7 +217,7 @@ export default function DashboardPage() {
       <section className="panel two-col">
         <article>
           <div className="panel-head">
-            <h3>Task hôm nay</h3>
+            <h3>{copy.todayTask}</h3>
           </div>
           <div className="list-cards">
             {todayTasks.length ? (
@@ -174,20 +228,22 @@ export default function DashboardPage() {
                     {task.start} - {task.end}
                   </div>
                   <div className="muted">
-                    <span className="badge">{statusLabel(task.status)}</span>
-                    <span className={`badge task-priority-pill priority-${task.priority}`}>{priorityLabel(task.priority)}</span>
+                    <span className="badge">{statusLabel(task.status, locale)}</span>
+                    <span className={`badge task-priority-pill priority-${task.priority}`}>
+                      {priorityLabel(task.priority, locale)}
+                    </span>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="mini-card">Chưa có task hôm nay.</div>
+              <div className="mini-card">{copy.noTodayTask}</div>
             )}
           </div>
         </article>
 
         <article>
           <div className="panel-head">
-            <h3>Mục Tiêu Tuần</h3>
+            <h3>{copy.weeklyGoals}</h3>
           </div>
           <div className="goal-list">
             {goals.length ? (
@@ -203,15 +259,15 @@ export default function DashboardPage() {
                     <span style={{ width: `${goal.progress}%` }} />
                   </div>
                   <p className="muted">
-                    Hạn chót: {formatDate(goal.deadline)} · {goal.progress}%
+                    {copy.deadline}: {formatDate(goal.deadline, locale)} · {goal.progress}%
                   </p>
                   {daysRemaining(goal.deadline) <= 2 && goal.progress < 100 ? (
-                    <p className="reminder">Sắp hết tuần nhưng mục tiêu chưa đạt.</p>
+                    <p className="reminder">{copy.weekWarning}</p>
                   ) : null}
                 </div>
               ))
             ) : (
-              <div className="mini-card">Chưa có mục tiêu tuần.</div>
+              <div className="mini-card">{copy.noGoals}</div>
             )}
           </div>
         </article>
@@ -219,3 +275,4 @@ export default function DashboardPage() {
     </AppShell>
   );
 }
+

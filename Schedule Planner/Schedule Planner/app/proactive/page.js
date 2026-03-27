@@ -368,11 +368,14 @@ export default function ProactivePlannerPage() {
 
   return (
     <AppShell
-      title="Proactive Planner"
-      subtitle="Auto planning actions, approval queue, and rescue flow"
-      quote="Plan first, recover fast."
+      title={{ vi: "Lập Kế Hoạch Chủ Động", en: "Proactive Planner" }}
+      subtitle={{
+        vi: "Tự động đề xuất kế hoạch, hàng chờ duyệt và luồng xử lý rủi ro",
+        en: "Auto planning actions, approval queue, and rescue flow",
+      }}
+      quote={{ vi: "Lên kế hoạch trước, xử lý nhanh khi phát sinh.", en: "Plan first, recover fast." }}
       goalProgress={state.goalOverall}
-      themeLabel={darkMode ? "Che do sang" : "Che do toi"}
+      themeLabel={darkMode ? { vi: "Chế độ sáng", en: "Light mode" } : { vi: "Chế độ tối", en: "Dark mode" }}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">

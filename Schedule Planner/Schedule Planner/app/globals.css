@@ -2965,7 +2965,7 @@ body.dark .dot {
   .daily-timeline-panel .grid-form select,
   .daily-timeline-panel .grid-form button,
   .daily-timeline-panel .grid-form textarea {
-    min-height: 34px;
+    min-height: 33px;
     padding: 6px 8px;
     font-size: 0.84rem;
   }

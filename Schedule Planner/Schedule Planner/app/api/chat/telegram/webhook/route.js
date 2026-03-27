@@ -13,6 +13,7 @@ import {
 } from "@/lib/db/queries/integrationConnectionQueries";
 import { listNotificationChannelSettingsByChannelAndDestination } from "@/lib/db/queries/notificationChannelSettingQueries";
 import { ensureUserExists } from "@/lib/db/users";
+import { convertTextToTelegramHtml } from "@/lib/integrations/telegramHtml";
 import { sendTelegramReminder, TelegramSendError } from "@/lib/integrations/telegramSender";
 import { NextResponse } from "next/server";
 
@@ -415,11 +416,15 @@ export async function POST(request) {
           provider: "auto",
         });
 
+    const replyHtml = convertTextToTelegramHtml(turnResult.replyText);
+
     const sendResult = await sendTelegramReminder({
       connectionId: connection.connectionId,
       integrationId: "telegram",
       chatId,
       text: turnResult.replyText,
+      htmlText: replyHtml,
+      parseMode: replyHtml ? "HTML" : "",
     });
 
     await persistOutboundMessage({
@@ -430,6 +435,7 @@ export async function POST(request) {
         stage: turnResult.stage,
         routeResult: turnResult.routeResult,
         execution: turnResult.execution,
+        replyHtml,
         telegramResponse: sendResult.response,
       },
       nextContext: turnResult.nextContext,
@@ -440,6 +446,7 @@ export async function POST(request) {
       threadId: thread.id,
       stage: turnResult.stage,
       replyText: turnResult.replyText,
+      replyHtml,
     });
   } catch (error) {
     if (error instanceof ChatWebhookError) {

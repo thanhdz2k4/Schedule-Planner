@@ -40,6 +40,14 @@ const COPY = {
     emptyConversation: "Chưa có hội thoại. Gửi câu đầu tiên để bắt đầu.",
     latestJson: "Kết quả JSON mới nhất",
     noResponse: "Chưa có response.",
+    htmlToolTitle: "Công Cụ Text -> HTML",
+    htmlToolSub: "Dán câu trả lời AI để convert sang Telegram HTML dễ đọc.",
+    htmlInputPlaceholder: "Dán text AI vào đây để chuyển sang HTML...",
+    useLatestReply: "Lấy câu trả lời mới nhất",
+    convertHtml: "Chuyển HTML",
+    convertingHtml: "Đang chuyển...",
+    noHtml: "Chưa có HTML output.",
+    callHtmlToolFailed: "Không thể gọi công cụ HTML.",
     intent: "Intent",
     confidence: "Độ tin cậy",
     themeLight: "Chế độ sáng",
@@ -67,6 +75,14 @@ const COPY = {
     emptyConversation: "No conversation yet. Send the first prompt to start.",
     latestJson: "Latest JSON result",
     noResponse: "No response yet.",
+    htmlToolTitle: "Text -> HTML Tool",
+    htmlToolSub: "Paste AI text and convert it into readable Telegram HTML.",
+    htmlInputPlaceholder: "Paste AI text here to convert to HTML...",
+    useLatestReply: "Use latest reply",
+    convertHtml: "Convert HTML",
+    convertingHtml: "Converting...",
+    noHtml: "No HTML output yet.",
+    callHtmlToolFailed: "Cannot call HTML tool.",
     intent: "Intent",
     confidence: "Confidence",
     themeLight: "Light mode",
@@ -124,6 +140,10 @@ export default function AgentLabPage() {
   const [error, setError] = useState("");
   const [context, setContext] = useState(null);
   const [history, setHistory] = useState([]);
+  const [htmlInput, setHtmlInput] = useState("");
+  const [htmlOutput, setHtmlOutput] = useState("");
+  const [htmlBusy, setHtmlBusy] = useState(false);
+  const [htmlError, setHtmlError] = useState("");
 
   const runModeOptions = useMemo(
     () =>
@@ -143,6 +163,15 @@ export default function AgentLabPage() {
     }
 
     return null;
+  }, [history]);
+
+  const latestAssistantReply = useMemo(() => {
+    for (let i = history.length - 1; i >= 0; i -= 1) {
+      if (history[i].role === "assistant" && typeof history[i].text === "string" && history[i].text.trim()) {
+        return history[i].text.trim();
+      }
+    }
+    return "";
   }, [history]);
 
   if (!loaded) {
@@ -214,6 +243,44 @@ export default function AgentLabPage() {
   function switchAnonymousIdentity() {
     rotateAnonymousUserId();
     window.location.reload();
+  }
+
+  function useLatestAssistantReply() {
+    if (!latestAssistantReply) {
+      return;
+    }
+    setHtmlInput(latestAssistantReply);
+    setHtmlError("");
+  }
+
+  async function submitHtmlTool(event) {
+    event.preventDefault();
+    const trimmed = htmlInput.trim();
+    if (!trimmed || htmlBusy) {
+      return;
+    }
+
+    setHtmlBusy(true);
+    setHtmlError("");
+
+    try {
+      const response = await fetch("/api/tools/text-to-html", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: trimmed,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.message || copy.callHtmlToolFailed);
+      }
+      setHtmlOutput(typeof payload?.html === "string" ? payload.html : "");
+    } catch (convertError) {
+      setHtmlError(String(convertError?.message || convertError));
+    } finally {
+      setHtmlBusy(false);
+    }
   }
 
   return (
@@ -307,6 +374,39 @@ export default function AgentLabPage() {
             <div className="mini-card">{copy.noResponse}</div>
           )}
         </article>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h3>{copy.htmlToolTitle}</h3>
+            <p className="muted">{copy.htmlToolSub}</p>
+          </div>
+          <button type="button" className="btn ghost" onClick={useLatestAssistantReply} disabled={!latestAssistantReply}>
+            {copy.useLatestReply}
+          </button>
+        </div>
+
+        <form className="agent-html-form" onSubmit={submitHtmlTool}>
+          <textarea
+            value={htmlInput}
+            onChange={(event) => setHtmlInput(event.target.value)}
+            placeholder={copy.htmlInputPlaceholder}
+            rows={5}
+            required
+          />
+          <button type="submit" className="btn" disabled={htmlBusy}>
+            {htmlBusy ? copy.convertingHtml : copy.convertHtml}
+          </button>
+        </form>
+
+        {htmlError ? <p className="alert">{htmlError}</p> : null}
+
+        {htmlOutput ? (
+          <pre className="agent-json agent-json-wrap">{htmlOutput}</pre>
+        ) : (
+          <div className="mini-card">{copy.noHtml}</div>
+        )}
       </section>
     </AppShell>
   );

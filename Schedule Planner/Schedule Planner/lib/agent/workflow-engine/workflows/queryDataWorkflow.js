@@ -1,6 +1,176 @@
 import { formatQueryReply } from "@/lib/agent/workflow-engine/steps/formatReply";
 import { normalizeForMatch } from "@/lib/agent/router/textUtils";
 
+const QUERY_TYPE_OPTIONS = new Set([
+  "today_unfinished_count",
+  "week_total_hours",
+  "first_open_task",
+  "next_open_task",
+  "high_priority_open",
+  "today_task_list",
+  "today_summary",
+]);
+const QUERY_TYPE_CLASSIFY_CONFIDENCE_THRESHOLD = 0.62;
+
+function normalizeConfidence(value, fallback = 0.55) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return fallback;
+  }
+
+  if (value > 1 && value <= 100) {
+    return Math.max(0, Math.min(1, value / 100));
+  }
+
+  return Math.max(0, Math.min(1, value));
+}
+
+function normalizeQueryType(value, fallback = "today_summary") {
+  return typeof value === "string" && QUERY_TYPE_OPTIONS.has(value) ? value : fallback;
+}
+
+function extractJsonFromContent(content) {
+  if (typeof content !== "string") {
+    return null;
+  }
+
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1]?.trim() || trimmed;
+
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    const bracketMatch = candidate.match(/\{[\s\S]*\}/);
+    if (!bracketMatch) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(bracketMatch[0]);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function extractMessageText(responsePayload) {
+  const message = responsePayload?.choices?.[0]?.message;
+  const content = message?.content;
+
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item?.type === "text" && typeof item?.text === "string") return item.text;
+        return "";
+      })
+      .join("\n");
+  }
+
+  return "";
+}
+
+function resolveMistralTimeoutMs() {
+  const value = Number.parseInt(process.env.MISTRAL_TIMEOUT_MS || "", 10);
+  if (!Number.isInteger(value) || value < 2000) {
+    return 15000;
+  }
+  return value;
+}
+
+function isMistralConfigured() {
+  return Boolean(process.env.MISTRAL_API_KEY && process.env.MISTRAL_API_KEY.trim());
+}
+
+function buildQueryTypeClassifierSystemPrompt(todayISO, fallbackQueryType) {
+  return [
+    "You classify user question type for Schedule Planner query workflow.",
+    "Today is " + todayISO + ".",
+    "Return plain JSON only with schema:",
+    '{ "query_type": "today_unfinished_count|week_total_hours|first_open_task|next_open_task|high_priority_open|today_task_list|today_summary", "confidence": 0.0-1.0 }',
+    'Use "first_open_task" when user asks what to do first (e.g. "lam gi truoc", "viec dau tien").',
+    'Use "next_open_task" when user asks what to do now/next (e.g. "lam gi bay gio", "viec tiep theo").',
+    'Use "today_task_list" when user asks list/schedule/tasks for today.',
+    'Use "today_unfinished_count" when user asks how many unfinished tasks remain today.',
+    'Use "week_total_hours" when user asks total working hours this week.',
+    'Use "high_priority_open" when user asks open high priority tasks.',
+    'Use "today_summary" for overall summary of today.',
+    "If unsure, return fallback query_type: " + fallbackQueryType + ".",
+  ].join("\n");
+}
+
+async function resolveQueryTypeWithMistral({ text, now = new Date(), fallbackQueryType }) {
+  if (!isMistralConfigured()) {
+    return fallbackQueryType;
+  }
+
+  const inputText = typeof text === "string" ? text.trim() : "";
+  if (!inputText) {
+    return fallbackQueryType;
+  }
+
+  const apiKey = process.env.MISTRAL_API_KEY?.trim();
+  if (!apiKey) {
+    return fallbackQueryType;
+  }
+
+  const endpoint = (process.env.MISTRAL_API_URL || "https://api.mistral.ai/v1/chat/completions").trim();
+  const model = (process.env.MISTRAL_MODEL || "mistral-large-latest").trim();
+  const todayISO = now.toISOString().slice(0, 10);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), resolveMistralTimeoutMs());
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        messages: [
+          { role: "system", content: buildQueryTypeClassifierSystemPrompt(todayISO, fallbackQueryType) },
+          { role: "user", content: inputText },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      throw new Error(`Mistral query-type API ${response.status}: ${errorText.slice(0, 250)}`);
+    }
+
+    const payload = await response.json();
+    const content = extractMessageText(payload);
+    const parsed = extractJsonFromContent(content);
+    const queryType = normalizeQueryType(parsed?.query_type, fallbackQueryType);
+    const confidence = normalizeConfidence(parsed?.confidence, 0.55);
+
+    if (confidence < QUERY_TYPE_CLASSIFY_CONFIDENCE_THRESHOLD) {
+      return fallbackQueryType;
+    }
+
+    return queryType;
+  } catch (error) {
+    console.warn("Query-type mistral classifier failed, fallback to rule:", error?.message || error);
+    return fallbackQueryType;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function toDateString(value) {
   if (!value) return null;
   if (typeof value === "string") return value.slice(0, 10);
@@ -56,6 +226,23 @@ function taskToLine(task, index) {
   return `${index + 1}. ${task.start}-${task.end} | ${task.title} (${statusLabel(task.status)}, ưu tiên ${priorityLabel(task.priority)})`;
 }
 
+function shouldReturnFirstOpenTask(normalizedText) {
+  if (!normalizedText) return false;
+
+  if (
+    /\b(task|cong viec|viec)\b/.test(normalizedText) &&
+    /\b(truoc|dau tien|truoc tien|bat dau)\b/.test(normalizedText)
+  ) {
+    return true;
+  }
+
+  return (
+    /\b(can|nen|phai)\b/.test(normalizedText) &&
+    /\b(lam|thuc hien|xu ly|bat dau)\b/.test(normalizedText) &&
+    /\b(truoc|dau tien)\b/.test(normalizedText)
+  );
+}
+
 function shouldReturnNextOpenTask(normalizedText) {
   if (!normalizedText) return false;
 
@@ -85,7 +272,7 @@ function shouldReturnNextOpenTask(normalizedText) {
   return /\b(lam gi tiep|nen lam gi|nen uu tien viec nao)\b/.test(normalizedText);
 }
 
-function resolveQueryType({ text }) {
+function resolveQueryTypeByRules({ text }) {
   const normalizedText = normalizeForMatch(text || "");
 
   if (
@@ -98,6 +285,10 @@ function resolveQueryType({ text }) {
 
   if (/\b(tuan nay)\b/.test(normalizedText) && /\b(tong|bao nhieu)\b/.test(normalizedText) && /\b(gio)\b/.test(normalizedText)) {
     return "week_total_hours";
+  }
+
+  if (shouldReturnFirstOpenTask(normalizedText)) {
+    return "first_open_task";
   }
 
   if (shouldReturnNextOpenTask(normalizedText)) {
@@ -116,6 +307,11 @@ function resolveQueryType({ text }) {
   }
 
   return "today_summary";
+}
+
+async function resolveQueryType({ text, now = new Date() }) {
+  const fallbackQueryType = resolveQueryTypeByRules({ text });
+  return resolveQueryTypeWithMistral({ text, now, fallbackQueryType });
 }
 
 function mapQueryTaskRow(row) {
@@ -388,6 +584,56 @@ async function runNextOpenTask(db, userId, now) {
   };
 }
 
+async function runFirstOpenTask(db, userId, now) {
+  const today = toDateString(now);
+  const result = await db.query(
+    `
+      SELECT id, title, date, start_time, end_time, status, priority
+      FROM tasks
+      WHERE user_id = $1::uuid
+        AND date = $2::date
+        AND status <> 'done'
+      ORDER BY start_time ASC, created_at ASC
+      LIMIT 50
+    `,
+    [userId, today]
+  );
+
+  const openTasks = result.rows.map(mapQueryTaskRow);
+  if (openTasks.length === 0) {
+    return {
+      query_type: "first_open_task",
+      summary: "Hom nay ban khong con task chua hoan thanh.",
+      data: {
+        date: today,
+        remaining_open_tasks: 0,
+        selected_task: null,
+        open_tasks: [],
+      },
+    };
+  }
+
+  const selectedTask = openTasks[0];
+  const summary = `${
+    openTasks.length === 1
+      ? "Ban chi con 1 task chua hoan thanh."
+      : `Ban con ${openTasks.length} task chua hoan thanh.`
+  } Viec nen lam truoc: ${selectedTask.start}-${selectedTask.end} | ${selectedTask.title} (${statusLabel(
+    selectedTask.status
+  )}, uu tien ${priorityLabel(selectedTask.priority)}), vi day la task som nhat chua xong hom nay.`;
+
+  return {
+    query_type: "first_open_task",
+    summary,
+    data: {
+      date: today,
+      remaining_open_tasks: openTasks.length,
+      selected_task: selectedTask,
+      open_tasks: openTasks,
+    },
+  };
+}
+
 async function runTodaySummary(db, userId, now) {
   const today = toDateString(now);
   const result = await db.query(
@@ -435,6 +681,8 @@ async function runQueryByType({ db, userId, now, queryType }) {
       return runHighPriorityOpen(db, userId);
     case "today_task_list":
       return runTodayTaskList(db, userId, now);
+    case "first_open_task":
+      return runFirstOpenTask(db, userId, now);
     case "next_open_task":
       return runNextOpenTask(db, userId, now);
     case "today_summary":
@@ -447,7 +695,7 @@ export const queryDataWorkflow = [
   {
     name: "resolve_query_type",
     run: async (ctx) => {
-      ctx.state.queryType = resolveQueryType({ text: ctx.text, entities: ctx.entities });
+      ctx.state.queryType = await resolveQueryType({ text: ctx.text, now: ctx.now });
       return { query_type: ctx.state.queryType };
     },
   },

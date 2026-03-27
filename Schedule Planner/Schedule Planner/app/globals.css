@@ -2285,7 +2285,9 @@ body.dark .grid-form button,
 body.dark .grid-form textarea,
 body.dark .agent-form select,
 body.dark .agent-form textarea,
-body.dark .agent-form button {
+body.dark .agent-form button,
+body.dark .agent-html-form textarea,
+body.dark .agent-html-form button {
   background: #2a3c30;
   border-color: #46604b;
   color: var(--ink);
@@ -2295,7 +2297,8 @@ body.dark .grid-form input:focus,
 body.dark .grid-form select:focus,
 body.dark .grid-form textarea:focus,
 body.dark .agent-form select:focus,
-body.dark .agent-form textarea:focus {
+body.dark .agent-form textarea:focus,
+body.dark .agent-html-form textarea:focus {
   background: #324837;
 }
 
@@ -3183,6 +3186,43 @@ body.dragging-task * {
   overflow: auto;
   font-size: 0.8rem;
   line-height: 1.5;
+}
+
+.agent-json-wrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agent-html-form {
+  display: grid;
+  gap: 10px;
+}
+
+.agent-html-form textarea,
+.agent-html-form button {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  padding: 11px 12px;
+  min-height: 44px;
+}
+
+.agent-html-form textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.agent-html-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--ring);
+  background: var(--surface);
+}
+
+.agent-html-form .btn[disabled] {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 @media (max-width: 1120px) {

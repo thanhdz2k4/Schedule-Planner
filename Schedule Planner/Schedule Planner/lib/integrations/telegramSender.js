@@ -1,5 +1,7 @@
 ﻿import { resolveProviderConfigKey } from "@/lib/integrations/catalog";
 
+import { resolveTelegramMessageFormat } from "@/lib/integrations/telegramHtml";
+
 const DEFAULT_NANGO_BASE_URL = "https://api.nango.dev";
 const DEFAULT_TELEGRAM_SEND_PATH = "/proxy/sendMessage";
 const TRANSIENT_HTTP_STATUSES = new Set([408, 409, 429]);
@@ -88,6 +90,7 @@ export async function sendTelegramReminder({
   integrationId = "telegram",
   chatId,
   text,
+  htmlText = "",
   parseMode = "",
 }) {
   const trimmedConnectionId = typeof connectionId === "string" ? connectionId.trim() : "";
@@ -132,15 +135,20 @@ export async function sendTelegramReminder({
 
   const nangoBaseUrl = process.env.NANGO_BASE_URL?.trim() || DEFAULT_NANGO_BASE_URL;
   const url = `${nangoBaseUrl.replace(/\/+$/, "")}${resolveTelegramProxyPath()}`;
+  const formatted = resolveTelegramMessageFormat({
+    text: safeText,
+    htmlText,
+    parseMode,
+  });
+
   const payload = {
     chat_id: safeChatId,
-    text: safeText,
+    text: formatted.text,
     disable_web_page_preview: true,
   };
 
-  const safeParseMode = typeof parseMode === "string" ? parseMode.trim() : "";
-  if (safeParseMode) {
-    payload.parse_mode = safeParseMode;
+  if (formatted.parseMode) {
+    payload.parse_mode = formatted.parseMode;
   }
 
   let response;

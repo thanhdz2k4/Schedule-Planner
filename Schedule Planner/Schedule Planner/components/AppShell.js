@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -166,7 +166,7 @@ export default function AppShell({
 }) {
   const pathname = usePathname();
   const [locale, setLocale] = useUiLocale();
-  const [authSession, setAuthSession] = useState(null);
+  const [authSession, setAuthSession] = useState(() => (typeof window === "undefined" ? null : loadAuthSession()));
   const [authMode, setAuthMode] = useState("login");
   const [authForm, setAuthForm] = useState(DEFAULT_FORM);
   const [authBusy, setAuthBusy] = useState(false);
@@ -182,10 +182,6 @@ export default function AppShell({
     locale,
     typeof themeLabel === "string" ? themeLabel : copy.darkMode
   );
-
-  useEffect(() => {
-    setAuthSession(loadAuthSession());
-  }, [pathname]);
 
   const todayText = useMemo(
     () =>
@@ -389,4 +385,3 @@ export default function AppShell({
     </div>
   );
 }
-

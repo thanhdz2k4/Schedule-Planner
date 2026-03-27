@@ -102,27 +102,38 @@ export function usePlannerData() {
     let active = true;
 
     async function bootstrap() {
-      const anonymousUserId = getOrCreateAnonymousUserId();
-      if (!anonymousUserId) {
-        return;
-      }
-
+      const anonymousUserId = getOrCreateAnonymousUserId() || "";
       const localState = loadState();
-      let nextState = localState;
       const session = loadAuthSession();
+      const theme = localStorage.getItem(THEME_KEY) || "light";
+      const dark = theme === "dark";
+
+      let nextState = localState;
       let resolvedUserId = session?.userId || anonymousUserId;
       let resolvedAuthToken = session?.token || "";
-      let shouldPersist = true;
+      let shouldPersist = Boolean(anonymousUserId) && !session?.token;
+
+      if (!active) return;
+      setUserId(resolvedUserId);
+      setAuthToken(resolvedAuthToken);
+      setAllowPersist(shouldPersist);
+      setState(localState);
+      saveState(localState);
+      setDarkMode(dark);
+      document.body.classList.toggle("dark", dark);
+      setLoaded(true);
 
       // Logged-in users should follow server as source of truth.
       if (session?.token && session?.userId) {
         try {
           nextState = await fetchServerState(resolvedUserId, resolvedAuthToken);
+          shouldPersist = true;
         } catch (error) {
           if (error?.code === "UNAUTHORIZED") {
             clearAuthSession();
             resolvedUserId = anonymousUserId;
             resolvedAuthToken = "";
+            shouldPersist = Boolean(anonymousUserId);
 
             try {
               const anonymousServerState = await fetchServerState(resolvedUserId);
@@ -146,14 +157,16 @@ export function usePlannerData() {
         }
       } else {
         try {
-          const serverState = await fetchServerState(resolvedUserId);
-          const hasServerData = serverState.tasks.length > 0 || serverState.goals.length > 0;
+          if (resolvedUserId) {
+            const serverState = await fetchServerState(resolvedUserId);
+            const hasServerData = serverState.tasks.length > 0 || serverState.goals.length > 0;
 
-          if (hasServerData) {
-            nextState = serverState;
-          } else {
-            await saveServerState(resolvedUserId, localState);
-            nextState = localState;
+            if (hasServerData) {
+              nextState = serverState;
+            } else {
+              await saveServerState(resolvedUserId, localState);
+              nextState = localState;
+            }
           }
         } catch {
           nextState = localState;
@@ -164,14 +177,8 @@ export function usePlannerData() {
       setUserId(resolvedUserId);
       setAuthToken(resolvedAuthToken);
       setAllowPersist(shouldPersist);
-      setState(nextState);
+      setState((prev) => (areStatesEqual(prev, nextState) ? prev : nextState));
       saveState(nextState);
-
-      const theme = localStorage.getItem(THEME_KEY) || "light";
-      const dark = theme === "dark";
-      setDarkMode(dark);
-      document.body.classList.toggle("dark", dark);
-      setLoaded(true);
     }
 
     bootstrap();
@@ -195,7 +202,11 @@ export function usePlannerData() {
       } catch (error) {
         if (active && error?.code === "UNAUTHORIZED") {
           clearAuthSession();
-          window.location.reload();
+          const anonymousUserId = getOrCreateAnonymousUserId() || "";
+          setAuthToken("");
+          setUserId(anonymousUserId);
+          setAllowPersist(Boolean(anonymousUserId));
+          syncErrorShown.current = false;
           return;
         }
 
@@ -239,7 +250,10 @@ export function usePlannerData() {
 
         if (error?.code === "UNAUTHORIZED") {
           clearAuthSession();
-          window.location.reload();
+          const anonymousUserId = getOrCreateAnonymousUserId() || "";
+          setAuthToken("");
+          setUserId(anonymousUserId);
+          setAllowPersist(Boolean(anonymousUserId));
         }
       } finally {
         syncInFlight = false;

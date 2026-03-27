@@ -181,10 +181,29 @@ body.dark .brand-dot {
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.sidebar nav a span {
+.sidebar nav a .nav-link-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sidebar nav a .nav-link-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  opacity: 0.94;
+}
+
+.sidebar nav a .nav-link-label {
   display: block;
+  min-width: 0;
   font-size: 0.84rem;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar nav a::before {
@@ -1368,13 +1387,13 @@ body.dark .brand-dot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
 .task-tiny-row strong {
   min-width: 0;
-  flex: 1 1 220px;
+  flex: 1 1 140px;
   font-size: 0.72rem;
   line-height: 1.1;
   white-space: nowrap;
@@ -1436,9 +1455,10 @@ body.dark .brand-dot {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .task-card.compact .task-meta-row {
@@ -1499,11 +1519,13 @@ body.dark .brand-dot {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: nowrap;
 }
 
 .task-meta-row-tiny .task-action-buttons {
-  margin-left: auto;
-  gap: 3px;
+  margin-left: 2px;
+  gap: 4px;
+  flex: 0 0 auto;
 }
 
 .task-meta-row-tiny .task-priority-badge,
@@ -1513,7 +1535,11 @@ body.dark .brand-dot {
 }
 
 .task-meta-row-tiny .task-goal-badge {
-  max-width: 180px;
+  display: none;
+}
+
+.task-card.compact .task-goal-badge {
+  display: none;
 }
 
 .task-action-btn {
@@ -1525,6 +1551,7 @@ body.dark .brand-dot {
   font-size: 0.68rem;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .task-action-btn:hover {

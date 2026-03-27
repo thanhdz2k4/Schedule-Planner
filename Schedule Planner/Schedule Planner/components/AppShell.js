@@ -2,21 +2,33 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { clearAuthSession, loadAuthSession, saveAuthSession } from "@/lib/authClient";
+import overviewIcon from "@/images/icons8-overview-100.png";
+import timelineIcon from "@/images/icons8-timeline-100.png";
+import goalsIcon from "@/images/icons8-goal-100.png";
+import calendarIcon from "@/images/icons8-weekend-100.png";
+import integrationsIcon from "@/images/telegram.png";
+import agentIcon from "@/images/icons8-agent-100.png";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Tổng quan" },
-  { href: "/daily", label: "Timeline ngày" },
-  { href: "/goals", label: "Goal tuần" },
-  { href: "/analytics", label: "Thống kê" },
-  { href: "/calendar", label: "Lịch tháng" },
-  { href: "/focus", label: "Tập trung" },
-  { href: "/reminders", label: "Nhắc việc" },
-  { href: "/integrations", label: "Tích hợp" },
-  { href: "/proactive", label: "Proactive" },
-  { href: "/agent-lab", label: "Agent Lab" },
+  { href: "/", label: "Dashboard" },
+  { href: "/daily", label: "Daily Plan" },
+  { href: "/goals", label: "Goals" },
+  { href: "/calendar", label: "Calendar" },
+  { href: "/reminders", label: "Reminders", aliases: ["/proactive", "/agent-lab"] },
+  { href: "/integrations", label: "Integrations" },
 ];
+
+const NAV_ICON_BY_PATH = {
+  "/": overviewIcon,
+  "/daily": timelineIcon,
+  "/goals": goalsIcon,
+  "/calendar": calendarIcon,
+  "/reminders": agentIcon,
+  "/integrations": integrationsIcon,
+};
 
 const DEFAULT_FORM = { email: "", password: "" };
 
@@ -120,15 +132,27 @@ export default function AppShell({
           </div>
         </div>
         <nav>
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={pathname === item.href || pathname.startsWith(`${item.href}/`) ? "active" : ""}
-            >
-              <span>{item.label}</span>
-            </Link>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const iconImage = NAV_ICON_BY_PATH[item.href];
+            const isActive =
+              pathname === item.href ||
+              pathname.startsWith(`${item.href}/`) ||
+              (Array.isArray(item.aliases) &&
+                item.aliases.some((alias) => pathname === alias || pathname.startsWith(`${alias}/`)));
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={isActive ? "active" : ""}
+              >
+                <span className="nav-link-content">
+                  {iconImage ? <Image src={iconImage} alt="" className="nav-link-icon" width={16} height={16} /> : null}
+                  <span className="nav-link-label">{item.label}</span>
+                </span>
+              </Link>
+            );
+          })}
         </nav>
         <div className="sidebar-card">
           <p>Mục tiêu tuần</p>

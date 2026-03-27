@@ -599,8 +599,8 @@ export default function DailyPage() {
                   const end = toMinutes(task.end);
                   const height = ((end - start) / 60) * HOUR_HEIGHT;
                   const top = (start / 60) * HOUR_HEIGHT;
-                  const isTiny = height < 72;
-                  const isCompact = height < 108;
+                  const isTiny = height < 112;
+                  const isCompact = height < 148;
                   const goalTitle = task.goalId ? goalTitleById.get(task.goalId) : "";
 
                   return (

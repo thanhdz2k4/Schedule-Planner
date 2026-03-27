@@ -9,13 +9,36 @@ const TELEGRAM_ALLOWED_UPDATES = [
   "callback_query",
 ];
 
+function sanitizeEnvValue(value) {
+  let normalized = value.trim();
+
+  if (
+    (normalized.startsWith('"') && normalized.endsWith('"')) ||
+    (normalized.startsWith("'") && normalized.endsWith("'"))
+  ) {
+    normalized = normalized.slice(1, -1).trim();
+  }
+
+  while (normalized.startsWith("\uFEFF")) {
+    normalized = normalized.slice(1);
+  }
+
+  while (normalized.startsWith("ï»¿")) {
+    normalized = normalized.slice(3);
+  }
+
+  normalized = normalized.replace(/(?:\\r|\\n)+$/g, "").trim();
+
+  return normalized.trim();
+}
+
 function readTextEnv(name, fallback = "") {
   const value = process.env[name];
   if (typeof value !== "string") {
     return fallback;
   }
 
-  const trimmed = value.trim();
+  const trimmed = sanitizeEnvValue(value);
   return trimmed || fallback;
 }
 
@@ -86,8 +109,17 @@ function resolveDatabaseUrl() {
   ];
 
   for (const value of candidates) {
-    if (value) {
-      return value;
+    if (!value) {
+      continue;
+    }
+
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === "postgres:" || parsed.protocol === "postgresql:") {
+        return value;
+      }
+    } catch {
+      continue;
     }
   }
 

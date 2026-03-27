@@ -282,6 +282,7 @@ export default function DailyPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
   const [locale] = useUiLocale();
   const [timelineMode, setTimelineMode] = useState("day");
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [alert, setAlert] = useState("");
   const [editingId, setEditingId] = useState("");
   const [drag, setDrag] = useState(null);
@@ -345,7 +346,7 @@ export default function DailyPage() {
 
   const isTimelineMode = timelineMode !== "month";
   const isRangeMode = timelineMode === "week";
-  const columnWidth = timelineMode === "week" ? 230 : 120;
+  const columnWidth = timelineMode === "week" ? (isMobileViewport ? 168 : 230) : isMobileViewport ? 108 : 120;
   const timelineWidth = TIMELINE_GUTTER + rangeDates.length * columnWidth + TIMELINE_RIGHT_PADDING;
   const rangeLabel = getRangeLabel(timelineMode, rangeDates, monthBoard, locale);
   const viewMeta = VIEW_META[timelineMode] || VIEW_META.day;
@@ -408,6 +409,19 @@ export default function DailyPage() {
       document.body.classList.remove("dragging-task");
     };
   }, [drag]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mobileQuery = window.matchMedia("(max-width: 760px)");
+    const syncViewport = () => setIsMobileViewport(mobileQuery.matches);
+    syncViewport();
+    if (typeof mobileQuery.addEventListener === "function") {
+      mobileQuery.addEventListener("change", syncViewport);
+      return () => mobileQuery.removeEventListener("change", syncViewport);
+    }
+    mobileQuery.addListener(syncViewport);
+    return () => mobileQuery.removeListener(syncViewport);
+  }, []);
 
   if (!loaded) return null;
 

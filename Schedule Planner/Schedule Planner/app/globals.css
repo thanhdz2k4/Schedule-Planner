@@ -2948,11 +2948,26 @@ body.dark .dot {
     gap: 8px;
   }
 
+  .daily-timeline-panel .grid-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 6px;
+  }
+
   .grid-form input,
   .grid-form select,
   .grid-form button,
   .grid-form textarea {
     min-height: 38px;
+  }
+
+  .daily-timeline-panel .grid-form input,
+  .daily-timeline-panel .grid-form select,
+  .daily-timeline-panel .grid-form button,
+  .daily-timeline-panel .grid-form textarea {
+    min-height: 34px;
+    padding: 6px 8px;
+    font-size: 0.84rem;
   }
 
   .timeline-view-toggle {
@@ -3031,8 +3046,55 @@ body.dark .dot {
     min-height: 120px;
   }
 
-  .timeline-wrap {
-    height: min(70vh, 660px);
+  .daily-timeline-panel.is-timeline-mode .timeline-wrap {
+    margin-top: 6px;
+    min-height: 320px;
+    height: min(62vh, 520px);
+    flex: 0 0 auto;
+  }
+
+  .daily-timeline-panel .timeline:not(.timeline-range) {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .daily-timeline-panel .timeline:not(.timeline-range) .hour-label {
+    left: 6px;
+    width: 46px;
+    font-size: 10px;
+  }
+
+  .daily-timeline-panel .timeline:not(.timeline-range) .task-card {
+    left: 58px;
+    width: calc(100% - 64px);
+    padding: 6px;
+    gap: 4px;
+  }
+
+  .daily-timeline-panel .timeline:not(.timeline-range) .task-card.tiny {
+    display: block;
+    padding: 4px 6px;
+  }
+
+  .daily-timeline-panel .timeline:not(.timeline-range) .task-card.tiny .task-meta-row-tiny {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 2px;
+  }
+
+  .daily-timeline-panel .timeline:not(.timeline-range) .task-card.tiny .task-goal-badge {
+    display: none;
+  }
+
+  .daily-timeline-panel .timeline:not(.timeline-range) .task-card.tiny .task-priority-badge,
+  .daily-timeline-panel .timeline:not(.timeline-range) .task-card.tiny .task-status-badge {
+    padding: 1px 5px;
+    font-size: 0.54rem;
+  }
+
+  .daily-timeline-panel .timeline:not(.timeline-range) .task-card.tiny .task-action-btn {
+    padding: 1px 5px;
+    font-size: 0.58rem;
   }
 }
 

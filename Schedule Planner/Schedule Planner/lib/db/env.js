@@ -1,9 +1,32 @@
+function sanitizeEnvValue(value) {
+  let normalized = value.trim();
+
+  if (
+    (normalized.startsWith('"') && normalized.endsWith('"')) ||
+    (normalized.startsWith("'") && normalized.endsWith("'"))
+  ) {
+    normalized = normalized.slice(1, -1).trim();
+  }
+
+  while (normalized.startsWith("\uFEFF")) {
+    normalized = normalized.slice(1);
+  }
+
+  while (normalized.startsWith("ï»¿")) {
+    normalized = normalized.slice(3);
+  }
+
+  normalized = normalized.replace(/(?:\\r|\\n)+$/g, "").trim();
+
+  return normalized.trim();
+}
+
 function readText(value) {
   if (typeof value !== "string") {
     return "";
   }
 
-  return value.trim();
+  return sanitizeEnvValue(value);
 }
 
 function pickEnv(env, ...names) {
@@ -29,8 +52,17 @@ export function resolveDatabaseUrl(env = process.env) {
   ];
 
   for (const value of candidates) {
-    if (value) {
-      return value;
+    if (!value) {
+      continue;
+    }
+
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === "postgres:" || parsed.protocol === "postgresql:") {
+        return value;
+      }
+    } catch {
+      continue;
     }
   }
 

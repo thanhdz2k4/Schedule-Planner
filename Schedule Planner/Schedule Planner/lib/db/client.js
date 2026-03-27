@@ -3,6 +3,16 @@ import { resolveDatabaseUrl, shouldUseSupabaseSsl, stripSslModeFromDatabaseUrl }
 
 let pool;
 
+function parsePositiveInt(rawValue, fallbackValue) {
+  const parsed = Number.parseInt(String(rawValue || ""), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallbackValue;
+}
+
+function resolvePoolMax(env = process.env) {
+  const defaultMax = env.VERCEL === "1" ? 1 : 10;
+  return parsePositiveInt(env.PG_POOL_MAX, defaultMax);
+}
+
 export function getPool() {
   const databaseUrl = resolveDatabaseUrl(process.env);
   if (!databaseUrl) {
@@ -15,6 +25,9 @@ export function getPool() {
     pool = new Pool({
       connectionString,
       ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+      max: resolvePoolMax(process.env),
+      idleTimeoutMillis: parsePositiveInt(process.env.PG_IDLE_TIMEOUT_MS, 10000),
+      connectionTimeoutMillis: parsePositiveInt(process.env.PG_CONNECTION_TIMEOUT_MS, 10000),
     });
   }
 

@@ -9,6 +9,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo [INFO] Running production migrations...
+call "%~dp0migrate-vercel.bat"
+if errorlevel 1 (
+  echo [ERROR] Production migration failed. Deploy aborted.
+  exit /b 1
+)
+
 echo [INFO] Deploying to Vercel Production...
 call npx --yes vercel deploy --prod --yes
 if errorlevel 1 (

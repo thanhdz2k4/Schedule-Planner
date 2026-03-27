@@ -7,6 +7,26 @@ const MIGRATION_LOCK_KEY = 391287412;
 
 let migrationsReady;
 
+function parseBooleanToggle(rawValue) {
+  const normalized = String(rawValue || "")
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) return null;
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return null;
+}
+
+function shouldAutoRunMigrations(env = process.env) {
+  const explicit = parseBooleanToggle(env.AUTO_RUN_MIGRATIONS ?? env.DB_AUTO_MIGRATE);
+  if (explicit !== null) {
+    return explicit;
+  }
+
+  return env.VERCEL !== "1";
+}
+
 async function listMigrationFiles() {
   const entries = await fs.readdir(MIGRATIONS_DIR, { withFileTypes: true });
   return entries
@@ -68,6 +88,10 @@ async function runMigrationsInternal() {
 }
 
 export async function ensureMigrations() {
+  if (!shouldAutoRunMigrations()) {
+    return;
+  }
+
   if (!migrationsReady) {
     migrationsReady = runMigrationsInternal().catch((error) => {
       migrationsReady = undefined;

@@ -49,10 +49,10 @@ function pickEnv(env, ...names) {
 
 function resolveDatabaseUrl(env = process.env) {
   const candidates = [
-    pickEnv(env, "DATABASE_URL"),
     pickEnv(env, "schedule_POSTGRES_URL_NON_POOLING", "SCHEDULE_POSTGRES_URL_NON_POOLING"),
-    pickEnv(env, "schedule_POSTGRES_URL", "SCHEDULE_POSTGRES_URL"),
     pickEnv(env, "POSTGRES_URL_NON_POOLING"),
+    pickEnv(env, "DATABASE_URL"),
+    pickEnv(env, "schedule_POSTGRES_URL", "SCHEDULE_POSTGRES_URL"),
     pickEnv(env, "POSTGRES_URL"),
     pickEnv(env, "schedule_POSTGRES_PRISMA_URL", "SCHEDULE_POSTGRES_PRISMA_URL"),
     pickEnv(env, "POSTGRES_PRISMA_URL"),
@@ -164,11 +164,18 @@ async function run() {
   let applied = 0;
 
   try {
+    console.log("[migrate] acquiring advisory lock...");
     await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
+    console.log("[migrate] advisory lock acquired");
+    await client.query("SET statement_timeout = 0");
+    await client.query("SET lock_timeout = 0");
+    console.log("[migrate] preparing schema_migrations table...");
     await ensureMigrationTable(client);
 
     const files = await listMigrationFiles();
+    console.log(`[migrate] found ${files.length} migration file(s)`);
     for (const filename of files) {
+      console.log(`[migrate] checking ${filename}`);
       const alreadyApplied = await hasAppliedMigration(client, filename);
       if (alreadyApplied) {
         continue;
@@ -176,6 +183,9 @@ async function run() {
 
       try {
         await client.query("BEGIN");
+        await client.query("SET LOCAL statement_timeout = 0");
+        await client.query("SET LOCAL lock_timeout = 0");
+        console.log(`[migrate] applying ${filename}...`);
         await applyMigration(client, filename);
         await client.query("COMMIT");
         applied += 1;

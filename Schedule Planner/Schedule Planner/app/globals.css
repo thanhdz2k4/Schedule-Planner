@@ -110,12 +110,12 @@ button {
 }
 
 .app-shell {
-  min-height: calc(100dvh - 36px);
-  margin: 18px;
+  min-height: calc(100dvh - 20px);
+  margin: 10px;
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: 234px minmax(0, 1fr);
   border: 1px solid var(--line);
-  border-radius: 30px;
+  border-radius: 16px;
   background: linear-gradient(165deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 252, 245, 0.98) 100%);
   overflow: hidden;
   box-shadow: var(--shadow);
@@ -125,10 +125,10 @@ button {
   position: sticky;
   top: 0;
   height: 100%;
-  padding: 16px 10px;
+  padding: 12px 8px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   border-right: 1px solid var(--line);
   background: linear-gradient(170deg, #f7fbf5 0%, #f2f7ee 100%);
   backdrop-filter: blur(8px);
@@ -167,17 +167,17 @@ body.dark .brand-dot {
 }
 
 .sidebar nav {
-  margin: 4px 0;
+  margin: 2px 0;
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .sidebar nav a {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.8);
-  padding: 7px 9px 7px 11px;
+  padding: 6px 8px 6px 10px;
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -213,20 +213,20 @@ body.dark .brand-dot {
 .sidebar-card {
   margin-top: auto;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 10px;
   background: linear-gradient(160deg, #ffffff 0%, #f4f8f1 100%);
-  padding: 12px;
-  box-shadow: 0 8px 16px rgba(54, 73, 49, 0.08);
+  padding: 10px;
+  box-shadow: 0 6px 12px rgba(54, 73, 49, 0.08);
 }
 
 .auth-card {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 10px;
   background: linear-gradient(160deg, #ffffff 0%, #f4f8f1 100%);
-  padding: 10px;
-  box-shadow: 0 8px 16px rgba(54, 73, 49, 0.08);
+  padding: 8px;
+  box-shadow: 0 6px 12px rgba(54, 73, 49, 0.08);
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .auth-head {
@@ -348,15 +348,15 @@ body.dark .brand-dot {
 }
 
 .main {
-  padding: clamp(14px, 2vw, 22px);
+  padding: clamp(10px, 1.5vw, 14px);
   display: grid;
   align-content: start;
-  gap: 12px;
+  gap: 10px;
 }
 
 .main.main-compact {
-  padding: 10px 12px;
-  gap: 8px;
+  padding: 8px 10px;
+  gap: 6px;
 }
 
 .main.main-daily {
@@ -367,23 +367,23 @@ body.dark .brand-dot {
 .hero {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr 1fr;
-  gap: 10px;
+  gap: 8px;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 12px;
   background: #ffffff;
-  padding: clamp(12px, 1.5vw, 16px);
-  box-shadow: 0 8px 20px rgba(60, 84, 53, 0.08);
+  padding: clamp(10px, 1.2vw, 12px);
+  box-shadow: 0 6px 14px rgba(60, 84, 53, 0.08);
 }
 
 .hero-section {
   border: 1px solid transparent;
-  border-radius: 14px;
-  padding: 10px;
-  min-height: 118px;
+  border-radius: 10px;
+  padding: 8px;
+  min-height: 104px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   transition: border-color 0.18s ease, transform 0.18s ease;
 }
 
@@ -436,18 +436,18 @@ body.dark .brand-dot {
 
 .panel {
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 12px;
   background: #ffffff;
-  box-shadow: 0 8px 20px rgba(60, 84, 53, 0.08);
-  padding: clamp(12px, 1.6vw, 16px);
+  box-shadow: 0 6px 14px rgba(60, 84, 53, 0.08);
+  padding: clamp(10px, 1.2vw, 12px);
 }
 
 .panel-head {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
 }
 
 .timeline-head-controls {
@@ -707,7 +707,7 @@ body.dark .brand-dot {
 .two-col {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 10px;
 }
 
 .grid-form {
@@ -788,7 +788,7 @@ body.dark .brand-dot {
 
 .list-cards {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .integration-toolbar {
@@ -941,10 +941,10 @@ body.dark .brand-dot {
 
 .mini-card {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 10px;
   background: linear-gradient(145deg, #f9fcf7 0%, #ffffff 100%);
-  padding: 12px;
-  box-shadow: 0 8px 16px rgba(58, 78, 54, 0.08);
+  padding: 10px;
+  box-shadow: 0 6px 12px rgba(58, 78, 54, 0.08);
 }
 
 .mini-card strong {
@@ -1581,17 +1581,17 @@ body.dark .brand-dot {
 
 .goal-list,
 .reminder-list {
-  margin-top: 12px;
+  margin-top: 8px;
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .goal-card {
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 10px;
+  padding: 10px;
   background: linear-gradient(150deg, #f7fbf4 0%, #ffffff 100%);
-  box-shadow: 0 8px 16px rgba(58, 78, 54, 0.08);
+  box-shadow: 0 6px 12px rgba(58, 78, 54, 0.08);
 }
 
 .goal-row {
@@ -1628,18 +1628,18 @@ body.dark .brand-dot {
 }
 
 .stat-grid {
-  margin-top: 12px;
+  margin-top: 8px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
 }
 
 .stat {
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 12px;
+  border-radius: 10px;
+  padding: 10px;
   background: linear-gradient(145deg, #f7fbf4 0%, #ffffff 100%);
-  box-shadow: 0 8px 16px rgba(58, 78, 54, 0.08);
+  box-shadow: 0 6px 12px rgba(58, 78, 54, 0.08);
 }
 
 .stat-label {
@@ -1655,32 +1655,70 @@ body.dark .brand-dot {
 }
 
 .charts-grid {
-  margin-top: 12px;
+  margin-top: 8px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.charts-grid-single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .chart-card {
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 10px;
   background: linear-gradient(155deg, #f7fbf4 0%, #ffffff 100%);
-  padding: 12px;
-  box-shadow: 0 8px 16px rgba(58, 78, 54, 0.08);
+  padding: 10px;
+  box-shadow: 0 6px 12px rgba(58, 78, 54, 0.08);
 }
 
 .premium-chart h4 {
   margin-bottom: 2px;
 }
 
+.analytics-switcher {
+  margin-top: 8px;
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  padding: 4px;
+  min-width: 260px;
+}
+
+.analytics-switcher-btn {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.analytics-switcher-btn:hover {
+  color: var(--ink);
+}
+
+.analytics-switcher-btn.active {
+  border-color: var(--line-strong);
+  background: #ffffff;
+  color: var(--ink);
+}
+
 .bars {
-  margin-top: 10px;
+  margin-top: 8px;
   display: flex;
   align-items: flex-end;
-  gap: 12px;
+  gap: 8px;
   min-height: 208px;
   overflow-x: auto;
-  padding: 8px 2px 10px;
+  padding: 6px 2px 8px;
 }
 
 .bar-item {
@@ -1704,13 +1742,13 @@ body.dark .brand-dot {
 }
 
 .line-grid {
-  margin-top: 10px;
+  margin-top: 8px;
   display: flex;
   align-items: flex-end;
-  gap: 12px;
+  gap: 8px;
   min-height: 206px;
   overflow-x: auto;
-  padding: 8px 2px 10px;
+  padding: 6px 2px 8px;
 }
 
 .line-point {
@@ -2124,6 +2162,21 @@ body.dark .timeline-view-btn.active {
   color: #e3efe3;
 }
 
+body.dark .analytics-switcher {
+  background: #2a3b31;
+  border-color: #4a6350;
+}
+
+body.dark .analytics-switcher-btn {
+  color: #a8bbab;
+}
+
+body.dark .analytics-switcher-btn.active {
+  background: #34493c;
+  border-color: #58725f;
+  color: #e3efe3;
+}
+
 body.dark .timeline-progress-card {
   background: linear-gradient(145deg, #2b3f32 0%, #223428 100%);
   border-color: #4a6350;
@@ -2468,8 +2521,8 @@ body.dark .dot {
 
 @media (max-width: 1320px) {
   .app-shell {
-    grid-template-columns: 252px minmax(0, 1fr);
-    margin: 14px;
+    grid-template-columns: 236px minmax(0, 1fr);
+    margin: 8px;
   }
 
   .hero {
@@ -2489,14 +2542,14 @@ body.dark .dot {
 @media (max-width: 1120px) {
   .app-shell {
     grid-template-columns: 1fr;
-    margin: 10px;
-    border-radius: 22px;
+    margin: 8px;
+    border-radius: 14px;
   }
 
   .sidebar {
     position: static;
     height: auto;
-    gap: 14px;
+    gap: 10px;
   }
 
   .sidebar nav {
@@ -2561,11 +2614,11 @@ body.dark .dot {
   }
 
   .main {
-    padding: 12px;
+    padding: 10px;
   }
 
   .sidebar {
-    padding: 14px 12px;
+    padding: 10px;
   }
 
   .sidebar nav {
@@ -2574,7 +2627,7 @@ body.dark .dot {
 
   .hero {
     grid-template-columns: 1fr;
-    border-radius: 20px;
+    border-radius: 12px;
   }
 
   .hero-right,
@@ -2589,6 +2642,15 @@ body.dark .dot {
 
   .timeline-view-btn {
     padding: 5px 11px;
+  }
+
+  .analytics-switcher {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .analytics-switcher-btn {
+    padding: 6px 8px;
   }
 
   .month-nav {
@@ -2964,4 +3026,74 @@ body.dark .proactive-status-pill.status-denied {
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+/* Minimal square layout overrides */
+.app-shell,
+.sidebar nav a,
+.sidebar-card,
+.auth-card,
+.hero,
+.hero-section,
+.panel,
+.mini-card,
+.goal-card,
+.stat,
+.chart-card,
+.integration-list-card,
+.day-cell,
+.month-nav-btn,
+.month-table-wrap,
+.month-cell,
+.month-task-chip,
+.task-card,
+.timeline-progress-card,
+.analytics-switcher,
+.analytics-switcher-btn,
+.timeline-view-toggle,
+.timeline-view-btn,
+.grid-form input,
+.grid-form select,
+.grid-form textarea,
+.grid-form button,
+.integration-filters button,
+.integration-avatar,
+.agent-bubble,
+.agent-json,
+.proactive-policy-card,
+.proactive-action-card {
+  border-radius: 0 !important;
+}
+
+.main,
+.main.main-compact,
+.sidebar,
+.sidebar nav,
+.hero,
+.two-col,
+.list-cards,
+.goal-list,
+.reminder-list,
+.stat-grid,
+.charts-grid,
+.integration-filters,
+.integration-cards-grid,
+.integration-actions-row,
+.proactive-toolbar,
+.proactive-actions-filter-row,
+.proactive-actions-list,
+.proactive-action-buttons {
+  gap: 2px !important;
+}
+
+.panel-head {
+  margin-bottom: 2px !important;
+  gap: 2px !important;
+}
+
+.stat-grid,
+.charts-grid,
+.goal-list,
+.reminder-list {
+  margin-top: 2px !important;
 }

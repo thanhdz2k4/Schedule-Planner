@@ -5,7 +5,7 @@ import AppShell from "@/components/AppShell";
 import { BarChart, LineChart } from "@/components/SimpleCharts";
 import StatsGrid from "@/components/StatsGrid";
 import { usePlannerData } from "@/hooks/usePlannerData";
-import { daysRemaining, formatDate, getStats, priorityLabel, statusLabel, taskDurationMinutes } from "@/lib/plannerStore";
+import { getStats, taskDurationMinutes } from "@/lib/plannerStore";
 
 const ANALYTICS_OPTIONS = [
   { value: "day", label: "Ngày" },
@@ -78,40 +78,68 @@ function getYearSeries(tasks) {
   return { labels, values };
 }
 
-export default function DashboardPage() {
+export default function AnalyticsPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
   const [analyticsView, setAnalyticsView] = useState("day");
   const tasks = state?.tasks || [];
-  const goals = state?.goals || [];
   const today = state?.today || "";
 
-  const stats = getStats(tasks);
-  const day = useMemo(() => getDaySeries(tasks), [tasks]);
-  const month = useMemo(() => getMonthSeries(tasks), [tasks]);
-  const year = useMemo(() => getYearSeries(tasks), [tasks]);
+  const daySeries = useMemo(() => getDaySeries(tasks), [tasks]);
+  const monthSeries = useMemo(() => getMonthSeries(tasks), [tasks]);
+  const yearSeries = useMemo(() => getYearSeries(tasks), [tasks]);
+
+  const now = useMemo(() => new Date(), []);
+  const tasksByView = useMemo(() => {
+    const dayTasks = tasks.filter((task) => task.date === today);
+    const monthTasks = tasks.filter((task) => {
+      const date = new Date(task.date);
+      return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+    });
+    const yearTasks = tasks.filter((task) => {
+      const date = new Date(task.date);
+      return date.getFullYear() === now.getFullYear();
+    });
+
+    return {
+      day: dayTasks,
+      month: monthTasks,
+      year: yearTasks,
+    };
+  }, [now, tasks, today]);
+
+  const statsByView = useMemo(
+    () => ({
+      day: getStats(tasksByView.day),
+      month: getStats(tasksByView.month),
+      year: getStats(tasksByView.year),
+    }),
+    [tasksByView.day, tasksByView.month, tasksByView.year]
+  );
+
   const chartByView = useMemo(
     () => ({
       day: {
         title: "Ngày: số giờ trong 7 ngày gần nhất",
         chartType: "bar",
-        series: day,
+        series: daySeries,
       },
       month: {
         title: "Tháng: xu hướng năng suất",
         chartType: "line",
-        series: month,
+        series: monthSeries,
       },
       year: {
         title: "Năm: so sánh theo tháng",
         chartType: "bar",
-        series: year,
+        series: yearSeries,
       },
     }),
-    [day, month, year]
+    [daySeries, monthSeries, yearSeries]
   );
+
   const currentChart = chartByView[analyticsView] || chartByView.day;
+  const currentStats = statsByView[analyticsView] || statsByView.day;
   const SelectedChart = currentChart.chartType === "line" ? LineChart : BarChart;
-  const todayTasks = tasks.filter((task) => task.date === today);
 
   if (!loaded) {
     return null;
@@ -119,26 +147,18 @@ export default function DashboardPage() {
 
   return (
     <AppShell
-      title="Bảng Điều Khiển"
-      subtitle="Toàn cảnh hiệu suất theo ngày, tháng, năm"
-      quote="Build consistency, not pressure."
+      title="Thống Kê"
+      subtitle="Theo dõi hiệu suất theo ngày, tháng, năm"
+      quote="Measure the rhythm, then optimize it."
       goalProgress={state.goalOverall}
       themeLabel={darkMode ? "Chế độ sáng" : "Chế độ tối"}
       onToggleTheme={actions.toggleTheme}
     >
       <section className="panel">
         <div className="panel-head">
-          <h3>Tổng Quan Số Liệu</h3>
-          <p className="muted">Theo dõi nhanh tiến độ và thời lượng làm việc</p>
+          <h3>Bảng Thống Kê Tổng Hợp</h3>
+          <p className="muted">Một slider duy nhất cho ngày, tháng và năm</p>
         </div>
-        <StatsGrid
-          items={[
-            { label: "Tổng task", value: stats.total },
-            { label: "Task hoàn thành", value: stats.done },
-            { label: "Tỷ lệ hoàn thành", value: `${stats.rate}%` },
-            { label: "Tổng giờ", value: `${stats.totalHours}h` },
-          ]}
-        />
 
         <div className="analytics-switcher" role="tablist" aria-label="Mốc thống kê">
           {ANALYTICS_OPTIONS.map((option) => (
@@ -155,66 +175,18 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        <StatsGrid
+          items={[
+            { label: "Tổng task", value: currentStats.total },
+            { label: "Task hoàn thành", value: currentStats.done },
+            { label: "Tỷ lệ hoàn thành", value: `${currentStats.rate}%` },
+            { label: "Tổng giờ", value: `${currentStats.totalHours}h` },
+          ]}
+        />
+
         <div className="charts-grid charts-grid-single">
           <SelectedChart title={currentChart.title} labels={currentChart.series.labels} values={currentChart.series.values} />
         </div>
-      </section>
-
-      <section className="panel two-col">
-        <article>
-          <div className="panel-head">
-            <h3>Task hôm nay</h3>
-          </div>
-          <div className="list-cards">
-            {todayTasks.length ? (
-              todayTasks.map((task) => (
-                <div className={`mini-card task-item priority-${task.priority}`} key={task.id}>
-                  <strong>{task.title}</strong>
-                  <div>
-                    {task.start} - {task.end}
-                  </div>
-                  <div className="muted">
-                    <span className="badge">{statusLabel(task.status)}</span>
-                    <span className={`badge task-priority-pill priority-${task.priority}`}>{priorityLabel(task.priority)}</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="mini-card">Chưa có task hôm nay.</div>
-            )}
-          </div>
-        </article>
-
-        <article>
-          <div className="panel-head">
-            <h3>Mục Tiêu Tuần</h3>
-          </div>
-          <div className="goal-list">
-            {goals.length ? (
-              goals.map((goal) => (
-                <div className="goal-card" key={goal.id}>
-                  <div className="goal-row">
-                    <strong>{goal.title}</strong>
-                    <span>
-                      {goal.completed}/{goal.target}
-                    </span>
-                  </div>
-                  <div className="progress">
-                    <span style={{ width: `${goal.progress}%` }} />
-                  </div>
-                  <p className="muted">
-                    Hạn chót: {formatDate(goal.deadline)} · {goal.progress}%
-                  </p>
-                  {daysRemaining(goal.deadline) <= 2 && goal.progress < 100 ? (
-                    <p className="reminder">Sắp hết tuần nhưng mục tiêu chưa đạt.</p>
-                  ) : null}
-                </div>
-              ))
-            ) : (
-              <div className="mini-card">Chưa có mục tiêu tuần.</div>
-            )}
-          </div>
-        </article>
       </section>
     </AppShell>
   );

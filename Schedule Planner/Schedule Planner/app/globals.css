@@ -3359,3 +3359,11 @@ body.dark .proactive-status-pill.status-denied {
     align-items: stretch;
   }
 }
+
+/* Global override requested: remove rounded corners and keep ultra-thin borders. */
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+  border-width: 0.5px !important;
+}

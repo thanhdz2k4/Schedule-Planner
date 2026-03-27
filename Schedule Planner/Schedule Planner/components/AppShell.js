@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -155,17 +155,19 @@ function normalizeApiErrorMessage(payload, locale, copy) {
     return copy.authFail;
   }
 
+  const legacyByMessage = {
     "Thiếu email hoặc mật khẩu.": "Missing email or password.",
     "Email không hợp lệ.": "Invalid email format.",
     "Mật khẩu phải có ít nhất 8 ký tự.": "Password must be at least 8 characters.",
+    "Mật khẩu phải có từ 8 đến 128 ký tự.": "Password must be 8-128 characters.",
     "Email đã tồn tại.": "Email already exists.",
+    "Email đã được sử dụng.": "Email is already in use.",
     "Email hoặc mật khẩu không đúng.": "Incorrect email or password.",
     "Session is invalid.": "Session is invalid.",
   };
 
   return legacyByMessage[message] || message;
 }
-
 async function safeJson(response) {
   try {
     return await response.json();

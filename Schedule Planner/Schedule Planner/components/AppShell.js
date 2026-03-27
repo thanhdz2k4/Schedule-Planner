@@ -11,18 +11,12 @@ import timelineIcon from "@/images/icons8-timeline-100.png";
 import goalsIcon from "@/images/icons8-goal-100.png";
 import calendarIcon from "@/images/icons8-weekend-100.png";
 import integrationsIcon from "@/images/telegram.png";
-import agentIcon from "@/images/icons8-agent-100.png";
 
 const NAV_ITEMS = [
   { href: "/", label: { vi: "Bảng điều khiển", en: "Dashboard" } },
   { href: "/daily", label: { vi: "Kế hoạch ngày", en: "Daily Plan" } },
   { href: "/goals", label: { vi: "Mục tiêu", en: "Goals" } },
   { href: "/calendar", label: { vi: "Lịch", en: "Calendar" } },
-  {
-    href: "/reminders",
-    label: { vi: "Nhắc việc", en: "Reminders" },
-    aliases: ["/proactive", "/agent-lab"],
-  },
   { href: "/integrations", label: { vi: "Kết nối", en: "Integrations" } },
 ];
 
@@ -31,7 +25,6 @@ const NAV_ICON_BY_PATH = {
   "/daily": timelineIcon,
   "/goals": goalsIcon,
   "/calendar": calendarIcon,
-  "/reminders": agentIcon,
   "/integrations": integrationsIcon,
 };
 

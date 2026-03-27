@@ -24,7 +24,6 @@ const CHEER_MESSAGES_BY_LOCALE = {
 const VIEW_OPTIONS = [
   { value: "day", label: { vi: "Ngày", en: "Day" } },
   { value: "week", label: { vi: "Tuần", en: "Week" } },
-  { value: "month", label: { vi: "Tháng", en: "Month" } },
 ];
 
 const VIEW_META = {
@@ -344,10 +343,12 @@ export default function DailyPage() {
     [state.tasks, rangeDateSet]
   );
 
-  const isTimelineMode = timelineMode !== "month";
   const isRangeMode = timelineMode === "week";
-  const columnWidth = timelineMode === "week" ? (isMobileViewport ? 168 : 230) : isMobileViewport ? 108 : 120;
-  const timelineWidth = TIMELINE_GUTTER + rangeDates.length * columnWidth + TIMELINE_RIGHT_PADDING;
+  const dayColumnWidth = isMobileViewport ? 108 : 120;
+  const rangeColumnWidthCss =
+    rangeDates.length > 0
+      ? `calc((100% - ${TIMELINE_GUTTER + TIMELINE_RIGHT_PADDING}px) / ${rangeDates.length})`
+      : `${dayColumnWidth}px`;
   const rangeLabel = getRangeLabel(timelineMode, rangeDates, monthBoard, locale);
   const viewMeta = VIEW_META[timelineMode] || VIEW_META.day;
   const scopeLabel =
@@ -422,6 +423,12 @@ export default function DailyPage() {
     mobileQuery.addListener(syncViewport);
     return () => mobileQuery.removeListener(syncViewport);
   }, []);
+
+  useEffect(() => {
+    if (timelineMode === "month") {
+      setTimelineMode("week");
+    }
+  }, [timelineMode]);
 
   if (!loaded) return null;
 
@@ -554,8 +561,8 @@ export default function DailyPage() {
       return { top, height };
     }
 
-    const left = TIMELINE_GUTTER + columnIndex * columnWidth + 6;
-    const width = Math.max(92, columnWidth - 12);
+    const left = `calc(${TIMELINE_GUTTER}px + ${columnIndex} * ${rangeColumnWidthCss} + 6px)`;
+    const width = `calc(${rangeColumnWidthCss} - 12px)`;
     return { top, height, left, width };
   }
 
@@ -570,7 +577,7 @@ export default function DailyPage() {
       hideHero
       mainClassName="main-compact main-daily"
     >
-      <section className={`panel daily-timeline-panel${timelineMode !== "month" ? " is-timeline-mode" : ""}`}>
+      <section className="panel daily-timeline-panel is-timeline-mode">
         <div className="panel-head daily-panel-head">
           <div className="daily-head-main">
             <h3>{viewMeta.panelTitle[locale]}</h3>
@@ -611,20 +618,6 @@ export default function DailyPage() {
                 </button>
               ))}
             </div>
-            {timelineMode === "month" ? (
-              <div className="month-nav">
-                <button type="button" className="month-nav-btn" onClick={() => handleDateChange(todayISO())}>
-                  {copy.monthToday}
-                </button>
-                <button type="button" className="month-nav-btn" onClick={() => shiftMonth(-1)} aria-label={copy.monthPrev}>
-                  ‹
-                </button>
-                <strong className="month-nav-label">{monthBoard.monthLabel}</strong>
-                <button type="button" className="month-nav-btn" onClick={() => shiftMonth(1)} aria-label={copy.monthNext}>
-                  ›
-                </button>
-              </div>
-            ) : null}
           </div>
         </div>
 
@@ -673,109 +666,116 @@ export default function DailyPage() {
           </p>
         </div>
 
-        {timelineMode === "month" ? (
-          <div className="month-table-wrap">
-            <div className="month-table-header">
-              {(WEEKDAY_SHORT_BY_LOCALE[locale] || WEEKDAY_SHORT_BY_LOCALE.vi).map((weekday) => (
-                <div key={weekday} className="month-weekday">
-                  {weekday}
-                </div>
-              ))}
-            </div>
-            <div className="month-table-grid">
-              {monthBoard.cells.map((cell) => {
-                const tasks = monthTasksByDate.get(cell.date) || [];
-                const isToday = cell.date === state.today;
-
-                return (
-                  <article
-                    key={cell.date}
-                    className={`month-cell${cell.inCurrentMonth ? "" : " outside"}${isToday ? " today" : ""}`}
-                  >
-                    <div className="month-cell-top">
-                      <strong>{pad2(cell.dayNumber)}</strong>
-                      <span>{formatTaskCount(locale, tasks.length)}</span>
-                    </div>
-                    <div className="month-cell-list">
-                      {tasks.map((task) => (
-                        <button
-                          key={task.id}
-                          type="button"
-                          className={`month-task-chip priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}`}
-                          data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
-                          onClick={() => onEdit(task)}
-                          title={`${task.start}-${task.end} | ${task.title} (${getStatusLabel(locale, task.status)}, ${copy.priorityWord} ${getPriorityLabel(locale, task.priority)})`}
-                        >
-                          <span className="month-task-time">{task.start}</span>
-                          <span className="month-task-title">{task.title}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <div
-            className={`timeline-wrap${drag ? " dragging" : ""}`}
-            onPointerMove={onDragMove}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-          >
-            <div className="timeline-scroll-inner" style={isRangeMode ? { minWidth: `${timelineWidth}px` } : undefined}>
-              {isRangeMode ? (
-                <div
-                  className="timeline-columns-header"
-                  style={{ gridTemplateColumns: `${TIMELINE_GUTTER}px repeat(${rangeDates.length}, ${columnWidth}px)` }}
-                >
-                  <div className="timeline-columns-spacer" />
-                  {rangeDates.map((item) => (
-                    <div
-                      key={item.date}
-                      className={`timeline-column-head${item.date === state.today ? " today" : ""}`}
-                      title={formatDisplayDate(item.date, locale)}
-                    >
-                      <strong>{item.label}</strong>
-                      <span>{item.subLabel}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              <div
-                className={`timeline${isRangeMode ? " timeline-range" : ""}`}
-                style={{
-                  "--timeline-column-width": `${columnWidth}px`,
-                  "--timeline-grid-start": `${TIMELINE_GUTTER}px`,
-                  ...(isRangeMode ? { minWidth: `${timelineWidth}px`, width: `${timelineWidth}px` } : {}),
-                }}
-              >
-                {Array.from({ length: 24 }).map((_, hour) => (
-                  <div key={hour} className="hour-label" style={{ top: `${hour * HOUR_HEIGHT + 2}px` }}>
-                    {String(hour).padStart(2, "0")}:00
+        <div className="daily-grid-shell">
+          {timelineMode === "month" ? (
+            <div className="month-table-wrap">
+              <div className="month-table-header">
+                {(WEEKDAY_SHORT_BY_LOCALE[locale] || WEEKDAY_SHORT_BY_LOCALE.vi).map((weekday) => (
+                  <div key={weekday} className="month-weekday">
+                    {weekday}
                   </div>
                 ))}
-
-                {visibleTasks.map((task) => {
-                  const start = toMinutes(task.start);
-                  const end = toMinutes(task.end);
-                  const height = ((end - start) / 60) * HOUR_HEIGHT;
-                  const top = (start / 60) * HOUR_HEIGHT;
-                  const isTiny = height < 112;
-                  const isCompact = height < 148;
-                  const goalTitle = task.goalId ? goalTitleById.get(task.goalId) : "";
+              </div>
+              <div className="month-table-grid">
+                {monthBoard.cells.map((cell) => {
+                  const tasks = monthTasksByDate.get(cell.date) || [];
+                  const isToday = cell.date === state.today;
 
                   return (
                     <article
-                      key={task.id}
-                      className={`task-card priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}${isCompact ? " compact" : ""}${isTiny ? " tiny" : ""}${editingId === task.id ? " editing" : ""}`}
-                      data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
-                      style={getTaskStyle(task, top, height)}
-                      onPointerDown={(event) => onDragStart(event, task)}
-                      onDoubleClick={() => onEdit(task)}
+                      key={cell.date}
+                      className={`month-cell${cell.inCurrentMonth ? "" : " outside"}${isToday ? " today" : ""}`}
                     >
-                      {isTiny ? (
+                      <div className="month-cell-top">
+                        <strong>{pad2(cell.dayNumber)}</strong>
+                        <span>{formatTaskCount(locale, tasks.length)}</span>
+                      </div>
+                      <div className="month-cell-list">
+                        {tasks.map((task) => (
+                          <button
+                            key={task.id}
+                            type="button"
+                            className={`month-task-chip priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}`}
+                            data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
+                            onClick={() => onEdit(task)}
+                            title={`${task.start}-${task.end} | ${task.title} (${getStatusLabel(locale, task.status)}, ${copy.priorityWord} ${getPriorityLabel(locale, task.priority)})`}
+                          >
+                            <span className="month-task-time">{task.start}</span>
+                            <span className="month-task-title">{task.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div
+              className={`timeline-wrap${drag ? " dragging" : ""}`}
+              onPointerMove={onDragMove}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
+            >
+              <div className="timeline-scroll-inner">
+                {isRangeMode ? (
+                  <div
+                    className="timeline-columns-header"
+                    style={{ gridTemplateColumns: `${TIMELINE_GUTTER}px repeat(${rangeDates.length}, minmax(0, 1fr))` }}
+                  >
+                    <div className="timeline-columns-spacer" />
+                    {rangeDates.map((item) => (
+                      <div
+                        key={item.date}
+                        className={`timeline-column-head${item.date === state.today ? " today" : ""}`}
+                        title={formatDisplayDate(item.date, locale)}
+                      >
+                        <strong>{item.label}</strong>
+                        <span>{item.subLabel}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div
+                  className={`timeline${isRangeMode ? " timeline-range" : ""}`}
+                  style={{
+                    "--timeline-column-width": isRangeMode ? rangeColumnWidthCss : `${dayColumnWidth}px`,
+                    "--timeline-grid-start": `${TIMELINE_GUTTER}px`,
+                  }}
+                >
+                  {Array.from({ length: 24 }).map((_, hour) => (
+                    <div key={hour} className="hour-label" style={{ top: `${hour * HOUR_HEIGHT + 2}px` }}>
+                      {String(hour).padStart(2, "0")}:00
+                    </div>
+                  ))}
+
+                  {visibleTasks.map((task) => {
+                    const start = toMinutes(task.start);
+                    const end = toMinutes(task.end);
+                    const height = ((end - start) / 60) * HOUR_HEIGHT;
+                    const top = (start / 60) * HOUR_HEIGHT;
+                    const isTiny = height < 112;
+                    const isCompact = height < 148;
+                    const goalTitle = task.goalId ? goalTitleById.get(task.goalId) : "";
+
+                    return (
+                      <article
+                        key={task.id}
+                        className={`task-card priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}${isCompact ? " compact" : ""}${isTiny ? " tiny" : ""}${isRangeMode && isTiny ? " week-tiny" : ""}${editingId === task.id ? " editing" : ""}`}
+                        data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
+                        style={getTaskStyle(task, top, height)}
+                        onPointerDown={(event) => onDragStart(event, task)}
+                        onDoubleClick={() => onEdit(task)}
+                      >
+                      {isRangeMode && isTiny ? (
+                        <div className="task-week-mini">
+                          <strong title={`${task.title} (${task.start} - ${task.end})`}>{task.title}</strong>
+                          <span className="task-week-mini-time">
+                            {task.start} - {task.end}
+                          </span>
+                        </div>
+                      ) : isTiny ? (
                         <div className="task-tiny-row">
                           <strong title={`${task.title} (${task.start} - ${task.end})`}>
                             {task.title} · {task.start} - {task.end}
@@ -884,13 +884,14 @@ export default function DailyPage() {
                           </div>
                         </div>
                       ) : null}
-                    </article>
-                  );
-                })}
+                      </article>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </section>
     </AppShell>
   );

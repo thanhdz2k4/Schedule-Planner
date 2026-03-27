@@ -631,8 +631,8 @@ body.dark .brand-dot {
   top: 0;
   z-index: 4;
   display: grid;
-  grid-template-columns: repeat(7, minmax(170px, 1fr));
-  min-width: 1190px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-width: 0;
   border-bottom: 1px solid var(--line);
   background: rgba(248, 252, 245, 0.94);
   backdrop-filter: blur(4px);
@@ -654,8 +654,8 @@ body.dark .brand-dot {
 
 .month-table-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(170px, 1fr));
-  min-width: 1190px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-width: 0;
 }
 
 .month-cell {
@@ -1160,19 +1160,16 @@ body.dark .brand-dot {
   border: 1px solid var(--line);
   border-radius: 16px;
   overflow: auto;
-  height: min(86vh, 920px);
   background: #fbfdf9;
-}
-
-.daily-timeline-panel.is-timeline-mode {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
 }
 
 .daily-timeline-panel {
   padding: 8px 10px;
+  --daily-grid-height: clamp(420px, 60vh, 700px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
 }
 
 .daily-timeline-panel .panel-head {
@@ -1268,12 +1265,24 @@ body.dark .brand-dot {
 
 .daily-timeline-panel .timeline-summary {
   margin-top: 4px;
+  flex-shrink: 0;
 }
 
-.daily-timeline-panel.is-timeline-mode .timeline-wrap {
+.daily-timeline-panel .daily-grid-shell {
   margin-top: 6px;
-  height: auto;
-  min-height: 260px;
+  min-height: 320px;
+  height: var(--daily-grid-height);
+  max-height: var(--daily-grid-height);
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.daily-timeline-panel .daily-grid-shell .timeline-wrap,
+.daily-timeline-panel .daily-grid-shell .month-table-wrap {
+  margin-top: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
   flex: 1 1 auto;
 }
 
@@ -1335,6 +1344,11 @@ body.dark .brand-dot {
     linear-gradient(90deg, rgba(201, 211, 196, 0.62) 1px, transparent 1px);
   background-size: 100% 36px, var(--timeline-column-width, 120px) 100%;
   background-position: 0 0, var(--timeline-grid-start, 0px) 0;
+}
+
+.timeline.timeline-range {
+  min-width: 0;
+  width: 100%;
 }
 
 .hour-label {
@@ -1442,6 +1456,33 @@ body.dark .brand-dot {
   gap: 0;
   display: flex;
   align-items: center;
+}
+
+.task-card.tiny.week-tiny {
+  display: block;
+  padding: 5px 8px;
+}
+
+.task-week-mini {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.task-week-mini strong {
+  min-width: 0;
+  font-size: 0.72rem;
+  line-height: 1.15;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.task-week-mini-time {
+  font-size: 0.62rem;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .task-head {
@@ -2793,7 +2834,7 @@ body.dark .dot {
 
   .month-table-header,
   .month-table-grid {
-    min-width: 980px;
+    min-width: 0;
   }
 
   .month-cell {
@@ -3013,7 +3054,7 @@ body.dark .dot {
 
   .month-table-header,
   .month-table-grid {
-    min-width: 680px;
+    min-width: 0;
   }
 
   .month-cell {
@@ -3049,10 +3090,15 @@ body.dark .dot {
     min-height: 120px;
   }
 
-  .daily-timeline-panel.is-timeline-mode .timeline-wrap {
+  .daily-timeline-panel {
+    --daily-grid-height: clamp(300px, 56vh, 480px);
+  }
+
+  .daily-timeline-panel .daily-grid-shell {
     margin-top: 6px;
     min-height: 320px;
-    height: min(62vh, 520px);
+    height: var(--daily-grid-height);
+    max-height: var(--daily-grid-height);
     flex: 0 0 auto;
   }
 

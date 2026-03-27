@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "worker:scheduler": "node scripts/background-agent.cjs"
   },
   "dependencies": {
     "@nangohq/frontend": "^0.69.46",

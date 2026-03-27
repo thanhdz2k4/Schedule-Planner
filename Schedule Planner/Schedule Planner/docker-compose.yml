@@ -18,6 +18,8 @@ services:
       NANGO_TELEGRAM_SEND_PATH: "${NANGO_TELEGRAM_SEND_PATH:-/proxy/sendMessage}"
       TELEGRAM_DEFAULT_CHAT_ID: "${TELEGRAM_DEFAULT_CHAT_ID:-}"
       TELEGRAM_WEBHOOK_SECRET_TOKEN: "${TELEGRAM_WEBHOOK_SECRET_TOKEN:-}"
+      INTERNAL_SCHEDULER_TOKEN: "${INTERNAL_SCHEDULER_TOKEN:-dev-scheduler-token}"
+      REMINDER_DISPATCH_LIMIT: "${REMINDER_DISPATCH_LIMIT:-20}"
       ROUTER_PROVIDER: "${ROUTER_PROVIDER:-rule}"
       MISTRAL_API_KEY: "${MISTRAL_API_KEY:-}"
       MISTRAL_MODEL: "${MISTRAL_MODEL:-mistral-large-latest}"
@@ -28,6 +30,36 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: schedule-planner-scheduler
+    command: ["npm", "run", "worker:scheduler"]
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-postgresql://planner:planner@db:5432/schedule_planner}"
+      SCHEDULER_APP_BASE_URL: "${SCHEDULER_APP_BASE_URL:-http://app:3000}"
+      INTERNAL_SCHEDULER_TOKEN: "${INTERNAL_SCHEDULER_TOKEN:-dev-scheduler-token}"
+      REMINDER_SCHEDULER_ENABLED: "${REMINDER_SCHEDULER_ENABLED:-true}"
+      REMINDER_DISPATCH_INTERVAL_MS: "${REMINDER_DISPATCH_INTERVAL_MS:-5000}"
+      REMINDER_DISPATCH_LIMIT: "${REMINDER_DISPATCH_LIMIT:-20}"
+      TELEGRAM_POLL_ENABLED: "${TELEGRAM_POLL_ENABLED:-true}"
+      TELEGRAM_POLL_INTERVAL_MS: "${TELEGRAM_POLL_INTERVAL_MS:-1500}"
+      TELEGRAM_POLL_BATCH_LIMIT: "${TELEGRAM_POLL_BATCH_LIMIT:-20}"
+      TELEGRAM_POLL_DELETE_WEBHOOK_ON_CONFLICT: "${TELEGRAM_POLL_DELETE_WEBHOOK_ON_CONFLICT:-true}"
+      NANGO_SECRET_KEY: "${NANGO_SECRET_KEY:-}"
+      NANGO_BASE_URL: "${NANGO_BASE_URL:-https://api.nango.dev}"
+      NANGO_INTEGRATION_TELEGRAM: "${NANGO_INTEGRATION_TELEGRAM:-}"
+      NANGO_TELEGRAM_UPDATES_PATH: "${NANGO_TELEGRAM_UPDATES_PATH:-/proxy/getUpdates}"
+      NANGO_TELEGRAM_DELETE_WEBHOOK_PATH: "${NANGO_TELEGRAM_DELETE_WEBHOOK_PATH:-/proxy/deleteWebhook}"
+      TELEGRAM_WEBHOOK_SECRET_TOKEN: "${TELEGRAM_WEBHOOK_SECRET_TOKEN:-}"
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
     restart: unless-stopped
 
   db:

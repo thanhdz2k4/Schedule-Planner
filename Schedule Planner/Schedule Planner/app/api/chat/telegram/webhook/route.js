@@ -279,6 +279,27 @@ async function persistInboundMessage({ connection, chatId, title, userText, inbo
       lastMessageAt: new Date(),
     });
 
+    if (inboundExternalMessageId) {
+      const duplicated = await db.query(
+        `
+          SELECT id
+          FROM chat_messages
+          WHERE thread_id = $1::uuid
+            AND direction = 'inbound'
+            AND external_message_id = $2
+          LIMIT 1
+        `,
+        [thread.id, inboundExternalMessageId]
+      );
+
+      if (duplicated.rowCount) {
+        return {
+          thread,
+          duplicated: true,
+        };
+      }
+    }
+
     await insertChatMessage(db, {
       threadId: thread.id,
       role: "user",
@@ -288,7 +309,10 @@ async function persistInboundMessage({ connection, chatId, title, userText, inbo
       rawPayload,
     });
 
-    return thread;
+    return {
+      thread,
+      duplicated: false,
+    };
   });
 }
 
@@ -352,7 +376,7 @@ export async function POST(request) {
         chatId,
       })
     );
-    const thread = await persistInboundMessage({
+    const inboundPersist = await persistInboundMessage({
       connection,
       chatId,
       title: buildThreadTitle(message),
@@ -363,6 +387,16 @@ export async function POST(request) {
         update: envelope.update,
       },
     });
+    if (inboundPersist.duplicated) {
+      return NextResponse.json({
+        ok: true,
+        ignored: true,
+        reason: "Duplicate inbound message.",
+        threadId: inboundPersist.thread.id,
+      });
+    }
+
+    const thread = inboundPersist.thread;
 
     const commandReply = buildCommandReply(userText);
     const turnResult = commandReply

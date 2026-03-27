@@ -1,0 +1,145 @@
+.page {
+  min-height: 100dvh;
+  padding: 28px 16px 48px;
+}
+
+.container {
+  margin: 0 auto;
+  width: min(920px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(160deg, #ffffff 0%, #f5f8f2 100%);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.hero {
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 8% 6%, rgba(14, 111, 93, 0.16), transparent 34%),
+    radial-gradient(circle at 92% 18%, rgba(86, 122, 161, 0.12), transparent 38%),
+    linear-gradient(160deg, #f7fbf4 0%, #ffffff 100%);
+}
+
+.kicker {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.title {
+  margin-top: 6px;
+  font-size: clamp(1.7rem, 3.2vw, 2.3rem);
+}
+
+.subtitle {
+  margin-top: 10px;
+  color: var(--muted);
+}
+
+.meta {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.content {
+  padding: 20px 24px 24px;
+  display: grid;
+  gap: 14px;
+}
+
+.section {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f9fcf7 0%, #ffffff 100%);
+  padding: 14px 14px 12px;
+}
+
+.section h2 {
+  font-size: 1.12rem;
+  margin-bottom: 8px;
+}
+
+.section p + p {
+  margin-top: 8px;
+}
+
+.section ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.section li + li {
+  margin-top: 6px;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.linkBtn {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(11, 93, 79, 0.34);
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0e6f5d 0%, #0b5d4f 100%);
+  color: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 700;
+  padding: 9px 12px;
+}
+
+.linkBtnGhost {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f6faf3;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 700;
+  padding: 9px 12px;
+}
+
+.footer {
+  border-top: 1px solid var(--line);
+  padding: 14px 24px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 760px) {
+  .container {
+    border-radius: 18px;
+  }
+
+  .hero,
+  .content,
+  .footer {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}

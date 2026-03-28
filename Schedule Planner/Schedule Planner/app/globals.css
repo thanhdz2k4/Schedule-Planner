@@ -731,6 +731,11 @@ body.dark .brand-dot {
   box-shadow: var(--shadow-soft);
 }
 
+.month-task-chip.selected {
+  border-color: rgba(14, 111, 93, 0.72);
+  box-shadow: 0 0 0 2px rgba(14, 111, 93, 0.2);
+}
+
 .month-task-time {
   font-size: 0.65rem;
   color: var(--muted);
@@ -1165,11 +1170,11 @@ body.dark .brand-dot {
 
 .daily-timeline-panel {
   padding: 8px 10px;
-  --daily-grid-height: clamp(420px, 60vh, 700px);
+  --daily-grid-height: calc(100dvh - 120px);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: 100%;
+  height: calc(100dvh - 20px);
 }
 
 .daily-timeline-panel .panel-head {
@@ -1180,20 +1185,23 @@ body.dark .brand-dot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 2px;
   flex-wrap: nowrap;
+  width: 33.333%;
+  max-width: 33.333%;
+  min-width: 230px;
 }
 
 .daily-timeline-panel .daily-head-main {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 2px;
   min-width: 0;
   overflow: hidden;
 }
 
 .daily-timeline-panel .daily-head-main h3 {
-  font-size: clamp(1.15rem, 1.7vw, 1.35rem);
+  font-size: clamp(0.5rem, 0.62vw, 0.62rem);
   margin: 0;
   white-space: nowrap;
 }
@@ -1207,21 +1215,22 @@ body.dark .brand-dot {
 .daily-timeline-panel .timeline-head-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   justify-items: unset;
   flex-shrink: 0;
 }
 
 .daily-timeline-panel .timeline-view-btn {
-  font-size: 0.74rem;
-  padding: 5px 10px;
+  font-size: 0.5rem;
+  padding: 2px 6px;
+  min-height: 20px;
 }
 
 .daily-timeline-panel .timeline-progress-card {
   min-width: 0;
   width: fit-content;
-  padding: 4px 9px;
-  gap: 6px;
+  padding: 2px 5px;
+  gap: 2px;
   border-radius: 999px;
 }
 
@@ -1231,18 +1240,26 @@ body.dark .brand-dot {
 }
 
 .daily-timeline-panel .grid-form {
-  margin-top: 5px;
-  gap: 8px;
+  margin-top: 2px;
+  gap: 5px;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.daily-timeline-panel .grid-form > * {
+  min-width: 0;
 }
 
 .daily-timeline-panel .grid-form input,
 .daily-timeline-panel .grid-form select,
 .daily-timeline-panel .grid-form button,
 .daily-timeline-panel .grid-form textarea {
-  min-height: 38px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  font-size: 0.95rem;
+  min-height: 24px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 0.56rem;
 }
 
 .daily-timeline-panel .timeline-progress-donut {
@@ -1252,15 +1269,15 @@ body.dark .brand-dot {
 .daily-timeline-panel .timeline-progress-meta {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 2px;
 }
 
 .daily-timeline-panel .timeline-progress-meta strong {
-  font-size: 0.8rem;
+  font-size: 0.5rem;
 }
 
 .daily-timeline-panel .timeline-progress-meta span {
-  font-size: 0.74rem;
+  font-size: 0.46rem;
 }
 
 .daily-timeline-panel .timeline-summary {
@@ -1270,10 +1287,10 @@ body.dark .brand-dot {
 
 .daily-timeline-panel .daily-grid-shell {
   margin-top: 6px;
-  min-height: 320px;
+  min-height: 0;
   height: var(--daily-grid-height);
   max-height: var(--daily-grid-height);
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -1408,6 +1425,15 @@ body.dark .brand-dot {
   box-shadow: 0 0 0 2px rgba(14, 111, 93, 0.2), 0 8px 16px rgba(72, 95, 64, 0.14);
 }
 
+.task-card.editing .task-head strong {
+  font-size: 0.82rem;
+}
+
+.task-card.selected {
+  border-color: rgba(14, 111, 93, 0.75);
+  box-shadow: 0 0 0 2px rgba(14, 111, 93, 0.22), 0 8px 16px rgba(72, 95, 64, 0.14);
+}
+
 .task-card.done {
   border-color: rgba(14, 111, 93, 0.46);
   border-left-color: #0e6f5d;
@@ -1505,7 +1531,7 @@ body.dark .brand-dot {
 .task-head strong {
   min-width: 0;
   flex: 1;
-  font-size: 0.91rem;
+  font-size: 0.72rem;
   line-height: 1.2;
   overflow: hidden;
   white-space: nowrap;
@@ -1532,7 +1558,7 @@ body.dark .brand-dot {
 .task-tiny-row strong {
   min-width: 0;
   flex: 1 1 140px;
-  font-size: 0.72rem;
+  font-size: 0.58rem;
   line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
@@ -1702,8 +1728,8 @@ body.dark .brand-dot {
   background: rgba(255, 255, 255, 0.86);
   color: var(--ink);
   border-radius: 999px;
-  padding: 3px 9px;
-  font-size: 0.68rem;
+  padding: 1px 6px;
+  font-size: 0.56rem;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
@@ -1736,8 +1762,8 @@ body.dark .brand-dot {
 }
 
 .task-card.tiny .task-action-btn {
-  padding: 1px 7px;
-  font-size: 0.62rem;
+  padding: 0 5px;
+  font-size: 0.52rem;
 }
 
 .task-card.tiny .task-action-btn-icon {
@@ -1892,6 +1918,87 @@ body.dark .brand-dot {
   background: var(--surface-soft);
   padding: 4px;
   min-width: 260px;
+}
+
+.dashboard-filter-row {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) auto minmax(150px, 1fr) minmax(150px, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.dashboard-filter-head {
+  display: grid;
+  gap: 2px;
+}
+
+.dashboard-filter-head strong {
+  font-size: 0.82rem;
+}
+
+.dashboard-filter-head .muted {
+  font-size: 0.72rem;
+}
+
+.dashboard-scope-toggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  padding: 4px;
+  min-width: 190px;
+}
+
+.dashboard-scope-btn {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 6px 8px;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.dashboard-scope-btn:hover {
+  color: var(--ink);
+}
+
+.dashboard-scope-btn.active {
+  border-color: var(--line-strong);
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.dashboard-filter-field {
+  display: grid;
+  gap: 4px;
+}
+
+.dashboard-filter-field span {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.dashboard-filter-field input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f9fcf7;
+  color: var(--ink);
+  padding: 7px 10px;
+  min-height: 38px;
+}
+
+.dashboard-filter-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--ring);
+  background: #ffffff;
 }
 
 .analytics-switcher-btn {
@@ -2406,6 +2513,31 @@ body.dark .analytics-switcher {
   border-color: #4a6350;
 }
 
+body.dark .dashboard-scope-toggle {
+  background: #2a3b31;
+  border-color: #4a6350;
+}
+
+body.dark .dashboard-scope-btn {
+  color: #a8bbab;
+}
+
+body.dark .dashboard-scope-btn.active {
+  background: #34493c;
+  border-color: #58725f;
+  color: #e3efe3;
+}
+
+body.dark .dashboard-filter-field input {
+  background: #2a3c30;
+  border-color: #46604b;
+  color: var(--ink);
+}
+
+body.dark .dashboard-filter-field input:focus {
+  background: #324837;
+}
+
 body.dark .analytics-switcher-btn {
   color: #a8bbab;
 }
@@ -2472,6 +2604,11 @@ body.dark .month-task-chip {
   border-color: #5a725d;
   background: linear-gradient(145deg, #344839 0%, #283a2f 100%);
   color: #e5efe2;
+}
+
+body.dark .month-task-chip.selected {
+  border-color: rgba(110, 224, 193, 0.76);
+  box-shadow: 0 0 0 2px rgba(110, 224, 193, 0.2);
 }
 
 body.dark .month-task-chip.priority-high {
@@ -2560,6 +2697,11 @@ body.dark .task-card {
 body.dark .task-card.editing {
   border-color: rgba(110, 224, 193, 0.72);
   box-shadow: 0 0 0 2px rgba(110, 224, 193, 0.2), 0 8px 18px rgba(0, 0, 0, 0.34);
+}
+
+body.dark .task-card.selected {
+  border-color: rgba(110, 224, 193, 0.78);
+  box-shadow: 0 0 0 2px rgba(110, 224, 193, 0.22), 0 8px 18px rgba(0, 0, 0, 0.34);
 }
 
 body.dark .task-card.done {
@@ -2852,6 +2994,20 @@ body.dark .dot {
     justify-content: flex-start;
   }
 
+  .dashboard-filter-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .dashboard-filter-head {
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-scope-toggle {
+    width: 100%;
+    min-width: 0;
+  }
+
   .calendar-weekdays,
   .calendar-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2993,6 +3149,10 @@ body.dark .dot {
     font-size: 1.08rem;
   }
 
+  .daily-timeline-panel .daily-head-main h3 {
+    font-size: 0.94rem;
+  }
+
   .grid-form {
     grid-template-columns: 1fr;
     gap: 8px;
@@ -3040,6 +3200,27 @@ body.dark .dot {
   .analytics-switcher-btn {
     padding: 7px 8px;
     font-size: 0.78rem;
+  }
+
+  .dashboard-filter-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .dashboard-scope-toggle {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dashboard-scope-btn {
+    padding: 7px 8px;
+    font-size: 0.74rem;
+  }
+
+  .dashboard-filter-field input {
+    min-height: 34px;
+    padding: 6px 8px;
   }
 
   .month-nav {
@@ -3097,12 +3278,12 @@ body.dark .dot {
   }
 
   .daily-timeline-panel {
-    --daily-grid-height: clamp(300px, 56vh, 480px);
+    --daily-grid-height: clamp(360px, 64vh, 620px);
   }
 
   .daily-timeline-panel .daily-grid-shell {
     margin-top: 6px;
-    min-height: 320px;
+    min-height: 360px;
     height: var(--daily-grid-height);
     max-height: var(--daily-grid-height);
     flex: 0 0 auto;

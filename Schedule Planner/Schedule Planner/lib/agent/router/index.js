@@ -1,6 +1,6 @@
 import { buildClarificationQuestion } from "@/lib/agent/router/clarify";
 import { evaluateConfidence } from "@/lib/agent/router/confidence";
-import { extractEntities } from "@/lib/agent/router/entityExtractors";
+import { extractEntities, inferUpdateTaskEntitiesFromText } from "@/lib/agent/router/entityExtractors";
 import { getPatchFields, getRequiredEntities, scoreIntentCandidates } from "@/lib/agent/router/intentRules";
 import { isMistralConfigured, routeWithMistral } from "@/lib/agent/router/llmRouter";
 import { hasValue, normalizeForMatch, pad2 } from "@/lib/agent/router/textUtils";
@@ -233,11 +233,15 @@ function normalizeEntitiesForWorkflow(entities) {
   return normalized;
 }
 
-function mergeEntitiesWithContext(currentEntities, contextEntities, intent) {
-  const baseContextEntities =
-    contextEntities && typeof contextEntities === "object" && !Array.isArray(contextEntities)
-      ? { ...contextEntities }
+function mergeEntitiesWithContext(currentEntities, context, intent) {
+  const contextEntities =
+    context?.entities && typeof context.entities === "object" && !Array.isArray(context.entities)
+      ? context.entities
       : {};
+  const baseContextEntities = { ...contextEntities };
+  const hasCurrentTarget = hasValue(currentEntities?.title) || hasValue(currentEntities?.task_id);
+  const hasPendingClarification =
+    typeof context?.last_agent_question === "string" && context.last_agent_question.trim().length > 0;
 
   // For update flow, do not carry stale time/date fields from previous turns.
   // Users often send short follow-ups like "task X da xong", which should only patch status.
@@ -246,6 +250,13 @@ function mergeEntitiesWithContext(currentEntities, contextEntities, intent) {
     delete baseContextEntities.start;
     delete baseContextEntities.end;
     delete baseContextEntities.duration_minutes;
+
+    // Only keep previous target when the assistant explicitly asked a clarification.
+    // Otherwise stale title/task_id can update the wrong task on short follow-up messages.
+    if (hasCurrentTarget || !hasPendingClarification) {
+      delete baseContextEntities.title;
+      delete baseContextEntities.task_id;
+    }
   }
 
   const merged = {
@@ -354,10 +365,18 @@ function finalizeRouterResult({ rawResult, source, context, inputText }) {
     intent = context.intent;
   }
 
-  const currentEntities =
+  let currentEntities =
     rawResult?.entities && typeof rawResult.entities === "object" && !Array.isArray(rawResult.entities)
       ? rawResult.entities
       : {};
+
+  if (intent === "update_task") {
+    const inferredUpdateEntities = inferUpdateTaskEntitiesFromText(inputText);
+    currentEntities = {
+      ...inferredUpdateEntities,
+      ...currentEntities,
+    };
+  }
 
   const taskHintEntities = {
     ...(context?.entities || {}),
@@ -371,7 +390,7 @@ function finalizeRouterResult({ rawResult, source, context, inputText }) {
     intent = "create_task";
   }
 
-  const entities = mergeEntitiesWithContext(currentEntities, context.entities, intent);
+  const entities = mergeEntitiesWithContext(currentEntities, context, intent);
 
   const confidenceValue =
     typeof rawResult?.confidence === "number" && !Number.isNaN(rawResult.confidence)

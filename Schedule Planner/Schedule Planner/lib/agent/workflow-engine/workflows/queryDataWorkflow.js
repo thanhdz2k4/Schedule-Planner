@@ -98,11 +98,11 @@ function buildQueryTypeClassifierSystemPrompt(todayISO, fallbackQueryType) {
     '{ "query_type": "today_unfinished_count|week_total_hours|first_open_task|next_open_task|high_priority_open|today_task_list|today_summary", "confidence": 0.0-1.0 }',
     'Use "first_open_task" when user asks what to do first (e.g. "lam gi truoc", "viec dau tien").',
     'Use "next_open_task" when user asks what to do now/next (e.g. "lam gi bay gio", "viec tiep theo").',
-    'Use "today_task_list" when user asks list/schedule/tasks for today.',
-    'Use "today_unfinished_count" when user asks how many unfinished tasks remain today.',
+    'Use "today_task_list" when user asks list/schedule/tasks for today or a specific date.',
+    'Use "today_unfinished_count" when user asks how many unfinished tasks remain on today or a specific date.',
     'Use "week_total_hours" when user asks total working hours this week.',
     'Use "high_priority_open" when user asks open high priority tasks.',
-    'Use "today_summary" for overall summary of today.',
+    'Use "today_summary" for overall summary of today or a specific date.',
     "If unsure, return fallback query_type: " + fallbackQueryType + ".",
   ].join("\n");
 }
@@ -178,6 +178,139 @@ function toDateString(value) {
   return null;
 }
 
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function toISODateUTC(date) {
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+}
+
+function asValidDate(year, month, day) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() + 1 !== month ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function isValidISODate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function formatDisplayDate(dateString) {
+  if (!isValidISODate(dateString)) {
+    return dateString || "";
+  }
+
+  const [year, month, day] = dateString.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function parseDateSignalFromText(text, now = new Date()) {
+  const normalizedText = normalizeForMatch(text || "");
+  if (!normalizedText) {
+    return null;
+  }
+
+  if (/\bhom nay\b/.test(normalizedText)) {
+    return toDateString(now);
+  }
+
+  if (/\b(ngay mai|mai)\b/.test(normalizedText)) {
+    return toDateString(addDays(now, 1));
+  }
+
+  if (/\b(ngay kia|mot)\b/.test(normalizedText)) {
+    return toDateString(addDays(now, 2));
+  }
+
+  const isoMatch = normalizedText.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/);
+  if (isoMatch) {
+    const year = Number.parseInt(isoMatch[1], 10);
+    const month = Number.parseInt(isoMatch[2], 10);
+    const day = Number.parseInt(isoMatch[3], 10);
+    const date = asValidDate(year, month, day);
+    if (date) {
+      return toISODateUTC(date);
+    }
+  }
+
+  const slashMatch = normalizedText.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?\b/);
+  if (slashMatch) {
+    const day = Number.parseInt(slashMatch[1], 10);
+    const month = Number.parseInt(slashMatch[2], 10);
+    const year = slashMatch[3] ? Number.parseInt(slashMatch[3], 10) : now.getFullYear();
+    const date = asValidDate(year, month, day);
+    if (date) {
+      return toISODateUTC(date);
+    }
+  }
+
+  const weekdayMatch = normalizedText.match(/\bthu\s*([2-8])\b/);
+  if (weekdayMatch) {
+    const weekdayNumber = Number.parseInt(weekdayMatch[1], 10);
+    const targetDay = weekdayNumber === 8 ? 0 : weekdayNumber - 1;
+    const today = new Date(now);
+    const currentDay = today.getDay();
+    let diff = targetDay - currentDay;
+    if (diff < 0) {
+      diff += 7;
+    }
+    return toDateString(addDays(today, diff));
+  }
+
+  return null;
+}
+
+function resolveTargetDate({ entities, text, now = new Date() }) {
+  if (isValidISODate(entities?.date)) {
+    return {
+      date: entities.date,
+      explicit: true,
+    };
+  }
+
+  const fromText = parseDateSignalFromText(text, now);
+  if (isValidISODate(fromText)) {
+    return {
+      date: fromText,
+      explicit: true,
+    };
+  }
+
+  return {
+    date: toDateString(now),
+    explicit: false,
+  };
+}
+
+function buildDatePrefix({ targetDate, now, explicitDate }) {
+  const today = toDateString(now);
+  if (!explicitDate && targetDate === today) {
+    return "Hom nay";
+  }
+  return `Ngay ${formatDisplayDate(targetDate)}`;
+}
+
 function toTimeString(value) {
   if (!value) return null;
   if (typeof value === "string") return value.slice(0, 5);
@@ -204,10 +337,6 @@ function addDays(baseDate, days) {
   const date = new Date(baseDate);
   date.setDate(baseDate.getDate() + days);
   return date;
-}
-
-function hasTodaySignal(normalizedText) {
-  return /\b(hom nay|nay)\b/.test(normalizedText);
 }
 
 function statusLabel(status) {
@@ -272,11 +401,12 @@ function shouldReturnNextOpenTask(normalizedText) {
   return /\b(lam gi tiep|nen lam gi|nen uu tien viec nao)\b/.test(normalizedText);
 }
 
-function resolveQueryTypeByRules({ text }) {
+function resolveQueryTypeByRules({ text, now = new Date() }) {
   const normalizedText = normalizeForMatch(text || "");
+  const hasDateSignal = Boolean(parseDateSignalFromText(text, now));
 
   if (
-    hasTodaySignal(normalizedText) &&
+    hasDateSignal &&
     /\b(chua|con)\b/.test(normalizedText) &&
     /\b(bao nhieu|task)\b/.test(normalizedText)
   ) {
@@ -300,17 +430,21 @@ function resolveQueryTypeByRules({ text }) {
   }
 
   if (
-    hasTodaySignal(normalizedText) &&
+    hasDateSignal &&
     /\b(liet ke|task nao|danh sach|cong viec nao|viec nao|co gi|lich)\b/.test(normalizedText)
   ) {
     return "today_task_list";
+  }
+
+  if (hasDateSignal) {
+    return "today_summary";
   }
 
   return "today_summary";
 }
 
 async function resolveQueryType({ text, now = new Date() }) {
-  const fallbackQueryType = resolveQueryTypeByRules({ text });
+  const fallbackQueryType = resolveQueryTypeByRules({ text, now });
   return resolveQueryTypeWithMistral({ text, now, fallbackQueryType });
 }
 
@@ -326,8 +460,7 @@ function mapQueryTaskRow(row) {
   };
 }
 
-async function runTodayUnfinishedCount(db, userId, now) {
-  const today = toDateString(now);
+async function runTodayUnfinishedCount(db, userId, targetDate, now, explicitDate) {
   const result = await db.query(
     `
       SELECT COUNT(*)::int AS total
@@ -336,24 +469,23 @@ async function runTodayUnfinishedCount(db, userId, now) {
         AND date = $2::date
         AND status <> 'done'
     `,
-    [userId, today]
+    [userId, targetDate]
   );
 
   const total = Number(result.rows[0]?.total || 0);
-  const summary =
-    total === 0
-      ? "Hôm nay bạn đã hoàn thành hết task rồi."
-      : `Hôm nay bạn còn ${total} task chưa hoàn thành.`;
+  const datePrefix = buildDatePrefix({ targetDate, now, explicitDate });
+  const summary = total === 0 ? `${datePrefix} ban da hoan thanh het task roi.` : `${datePrefix} ban con ${total} task chua hoan thanh.`;
 
   return {
     query_type: "today_unfinished_count",
     summary,
-    data: { date: today, total },
+    data: { date: targetDate, total },
   };
 }
 
-async function runWeekTotalHours(db, userId, now) {
-  const monday = startOfWeekMonday(now);
+async function runWeekTotalHours(db, userId, weekAnchorDate) {
+  const anchor = isValidISODate(weekAnchorDate) ? new Date(`${weekAnchorDate}T00:00:00Z`) : new Date();
+  const monday = startOfWeekMonday(anchor);
   const sunday = addDays(monday, 6);
   const fromDate = toDateString(monday);
   const toDate = toDateString(sunday);
@@ -371,7 +503,7 @@ async function runWeekTotalHours(db, userId, now) {
   const totalHours = Number(result.rows[0]?.total_hours || 0);
   return {
     query_type: "week_total_hours",
-    summary: `Tuần này bạn có tổng ${totalHours.toFixed(2)} giờ làm việc (từ ${fromDate} đến ${toDate}).`,
+    summary: `Tuan ${formatDisplayDate(fromDate)} - ${formatDisplayDate(toDate)} ban co tong ${totalHours.toFixed(2)} gio lam viec.`,
     data: {
       from_date: fromDate,
       to_date: toDate,
@@ -380,38 +512,60 @@ async function runWeekTotalHours(db, userId, now) {
   };
 }
 
-async function runHighPriorityOpen(db, userId) {
-  const result = await db.query(
-    `
-      SELECT id, title, date, start_time, end_time, status, priority
-      FROM tasks
-      WHERE user_id = $1::uuid
-        AND priority = 'high'
-        AND status <> 'done'
-      ORDER BY date ASC, start_time ASC
-      LIMIT 20
-    `,
-    [userId]
-  );
+async function runHighPriorityOpen(db, userId, targetDate, now, explicitDate) {
+  const hasDateFilter = Boolean(explicitDate && isValidISODate(targetDate));
+  const result = hasDateFilter
+    ? await db.query(
+        `
+          SELECT id, title, date, start_time, end_time, status, priority
+          FROM tasks
+          WHERE user_id = $1::uuid
+            AND priority = 'high'
+            AND status <> 'done'
+            AND date = $2::date
+          ORDER BY start_time ASC, created_at ASC
+          LIMIT 20
+        `,
+        [userId, targetDate]
+      )
+    : await db.query(
+        `
+          SELECT id, title, date, start_time, end_time, status, priority
+          FROM tasks
+          WHERE user_id = $1::uuid
+            AND priority = 'high'
+            AND status <> 'done'
+          ORDER BY date ASC, start_time ASC
+          LIMIT 20
+        `,
+        [userId]
+      );
 
   const tasks = result.rows.map(mapQueryTaskRow);
   const preview = tasks.slice(0, 5).map(taskToLine);
+  const datePrefix = buildDatePrefix({ targetDate, now, explicitDate: hasDateFilter });
+
   const summary =
     tasks.length === 0
-      ? "Không có task ưu tiên cao nào đang mở."
-      : `Có ${tasks.length} task ưu tiên cao chưa hoàn thành:\n${preview.join("\n")}${
-          tasks.length > preview.length ? `\n... và ${tasks.length - preview.length} task khác.` : ""
-        }`;
+      ? hasDateFilter
+        ? `${datePrefix} khong co task uu tien cao nao dang mo.`
+        : "Khong co task uu tien cao nao dang mo."
+      : hasDateFilter
+        ? `${datePrefix} co ${tasks.length} task uu tien cao chua hoan thanh:\n${preview.join("\n")}${
+            tasks.length > preview.length ? `\n... va ${tasks.length - preview.length} task khac.` : ""
+          }`
+        : `Co ${tasks.length} task uu tien cao chua hoan thanh:\n${preview.join("\n")}${
+            tasks.length > preview.length ? `\n... va ${tasks.length - preview.length} task khac.` : ""
+          }`;
 
   return {
     query_type: "high_priority_open",
     summary,
-    data: { tasks },
+    data: { tasks, date: hasDateFilter ? targetDate : null },
   };
 }
 
-async function runTodayTaskList(db, userId, now) {
-  const today = toDateString(now);
+async function runTodayTaskList(db, userId, targetDate, now, explicitDate) {
   const result = await db.query(
     `
       SELECT id, title, date, start_time, end_time, status, priority
@@ -421,22 +575,23 @@ async function runTodayTaskList(db, userId, now) {
       ORDER BY start_time ASC, created_at ASC
       LIMIT 50
     `,
-    [userId, today]
+    [userId, targetDate]
   );
 
   const tasks = result.rows.map(mapQueryTaskRow);
   const preview = tasks.slice(0, 10).map(taskToLine);
+  const datePrefix = buildDatePrefix({ targetDate, now, explicitDate });
   const summary =
     tasks.length === 0
-      ? "Hôm nay bạn không có task nào."
-      : `Hôm nay bạn có ${tasks.length} task:\n${preview.join("\n")}${
-          tasks.length > preview.length ? `\n... và ${tasks.length - preview.length} task khác.` : ""
+      ? `${datePrefix} ban khong co task nao.`
+      : `${datePrefix} ban co ${tasks.length} task:\n${preview.join("\n")}${
+          tasks.length > preview.length ? `\n... va ${tasks.length - preview.length} task khac.` : ""
         }`;
 
   return {
     query_type: "today_task_list",
     summary,
-    data: { date: today, tasks },
+    data: { date: targetDate, tasks },
   };
 }
 
@@ -510,8 +665,7 @@ function summarizeOverdueTasks(tasks) {
   return preview;
 }
 
-async function runNextOpenTask(db, userId, now) {
-  const today = toDateString(now);
+async function runNextOpenTask(db, userId, targetDate, now, explicitDate) {
   const result = await db.query(
     `
       SELECT id, title, date, start_time, end_time, status, priority
@@ -522,19 +676,40 @@ async function runNextOpenTask(db, userId, now) {
       ORDER BY start_time ASC, created_at ASC
       LIMIT 50
     `,
-    [userId, today]
+    [userId, targetDate]
   );
 
   const openTasks = result.rows.map(mapQueryTaskRow);
+  const datePrefix = buildDatePrefix({ targetDate, now, explicitDate });
+  const isTargetToday = targetDate === toDateString(now);
+
   if (openTasks.length === 0) {
     return {
       query_type: "next_open_task",
-      summary: "Hôm nay bạn không còn task chưa hoàn thành.",
+      summary: `${datePrefix} ban khong con task chua hoan thanh.`,
       data: {
-        date: today,
+        date: targetDate,
         remaining_open_tasks: 0,
         selected_task: null,
         open_tasks: [],
+      },
+    };
+  }
+
+  if (!isTargetToday) {
+    const selectedTask = openTasks[0];
+    const summary = `${datePrefix} ban con ${openTasks.length} task chua hoan thanh. Viec nen lam tiep: ${selectedTask.start}-${selectedTask.end} | ${selectedTask.title} (${statusLabel(selectedTask.status)}, uu tien ${priorityLabel(selectedTask.priority)}), vi day la task som nhat trong ngay.`;
+
+    return {
+      query_type: "next_open_task",
+      summary,
+      data: {
+        date: targetDate,
+        remaining_open_tasks: openTasks.length,
+        selected_task: selectedTask,
+        open_tasks: openTasks,
+        upcoming_open_tasks: openTasks,
+        overdue_open_tasks: [],
       },
     };
   }
@@ -545,14 +720,14 @@ async function runNextOpenTask(db, userId, now) {
   if (!selectedTask) {
     const overdueSummary = summarizeOverdueTasks(picked.overdueTasks);
     const summary = overdueSummary
-      ? `Từ bây giờ không còn task nào trong hôm nay. Bạn còn ${picked.overdueTasks.length} task chưa hoàn thành nhưng đã quá giờ: ${overdueSummary}.`
-      : "Từ bây giờ không còn task nào trong hôm nay.";
+      ? `Tu bay gio khong con task nao trong ${datePrefix.toLowerCase()}. Ban con ${picked.overdueTasks.length} task chua hoan thanh nhung da qua gio: ${overdueSummary}.`
+      : `Tu bay gio khong con task nao trong ${datePrefix.toLowerCase()}.`;
 
     return {
       query_type: "next_open_task",
       summary,
       data: {
-        date: today,
+        date: targetDate,
         remaining_open_tasks: openTasks.length,
         selected_task: null,
         open_tasks: openTasks,
@@ -564,17 +739,15 @@ async function runNextOpenTask(db, userId, now) {
 
   const summary = `${
     openTasks.length === 1
-      ? "Bạn chỉ còn 1 task chưa hoàn thành."
-      : `Bạn còn ${openTasks.length} task chưa hoàn thành.`
-  } Việc cần làm tiếp theo: ${selectedTask.start}-${selectedTask.end} | ${selectedTask.title} (${statusLabel(
-    selectedTask.status
-  )}, ưu tiên ${priorityLabel(selectedTask.priority)}), vì ${picked.reason}.`;
+      ? `${datePrefix} chi con 1 task chua hoan thanh.`
+      : `${datePrefix} con ${openTasks.length} task chua hoan thanh.`
+  } Viec can lam tiep theo: ${selectedTask.start}-${selectedTask.end} | ${selectedTask.title} (${statusLabel(selectedTask.status)}, uu tien ${priorityLabel(selectedTask.priority)}), vi ${picked.reason}.`;
 
   return {
     query_type: "next_open_task",
     summary,
     data: {
-      date: today,
+      date: targetDate,
       remaining_open_tasks: openTasks.length,
       selected_task: selectedTask,
       open_tasks: openTasks,
@@ -584,8 +757,7 @@ async function runNextOpenTask(db, userId, now) {
   };
 }
 
-async function runFirstOpenTask(db, userId, now) {
-  const today = toDateString(now);
+async function runFirstOpenTask(db, userId, targetDate, now, explicitDate) {
   const result = await db.query(
     `
       SELECT id, title, date, start_time, end_time, status, priority
@@ -596,16 +768,18 @@ async function runFirstOpenTask(db, userId, now) {
       ORDER BY start_time ASC, created_at ASC
       LIMIT 50
     `,
-    [userId, today]
+    [userId, targetDate]
   );
 
   const openTasks = result.rows.map(mapQueryTaskRow);
+  const datePrefix = buildDatePrefix({ targetDate, now, explicitDate });
+
   if (openTasks.length === 0) {
     return {
       query_type: "first_open_task",
-      summary: "Hom nay ban khong con task chua hoan thanh.",
+      summary: `${datePrefix} ban khong con task chua hoan thanh.`,
       data: {
-        date: today,
+        date: targetDate,
         remaining_open_tasks: 0,
         selected_task: null,
         open_tasks: [],
@@ -616,17 +790,15 @@ async function runFirstOpenTask(db, userId, now) {
   const selectedTask = openTasks[0];
   const summary = `${
     openTasks.length === 1
-      ? "Ban chi con 1 task chua hoan thanh."
-      : `Ban con ${openTasks.length} task chua hoan thanh.`
-  } Viec nen lam truoc: ${selectedTask.start}-${selectedTask.end} | ${selectedTask.title} (${statusLabel(
-    selectedTask.status
-  )}, uu tien ${priorityLabel(selectedTask.priority)}), vi day la task som nhat chua xong hom nay.`;
+      ? `${datePrefix} chi con 1 task chua hoan thanh.`
+      : `${datePrefix} con ${openTasks.length} task chua hoan thanh.`
+  } Viec nen lam truoc: ${selectedTask.start}-${selectedTask.end} | ${selectedTask.title} (${statusLabel(selectedTask.status)}, uu tien ${priorityLabel(selectedTask.priority)}), vi day la task som nhat chua xong.`;
 
   return {
     query_type: "first_open_task",
     summary,
     data: {
-      date: today,
+      date: targetDate,
       remaining_open_tasks: openTasks.length,
       selected_task: selectedTask,
       open_tasks: openTasks,
@@ -634,8 +806,7 @@ async function runFirstOpenTask(db, userId, now) {
   };
 }
 
-async function runTodaySummary(db, userId, now) {
-  const today = toDateString(now);
+async function runTodaySummary(db, userId, targetDate, now, explicitDate) {
   const result = await db.query(
     `
       SELECT
@@ -647,21 +818,22 @@ async function runTodaySummary(db, userId, now) {
       WHERE user_id = $1::uuid
         AND date = $2::date
     `,
-    [userId, today]
+    [userId, targetDate]
   );
 
   const row = result.rows[0] || {};
   const summaryData = {
-    date: today,
+    date: targetDate,
     total: Number(row.total || 0),
     done: Number(row.done || 0),
     open: Number(row.open || 0),
     total_hours: Number(row.total_hours || 0),
   };
 
-  let summary = "Hôm nay bạn chưa có task nào.";
+  const datePrefix = buildDatePrefix({ targetDate, now, explicitDate });
+  let summary = `${datePrefix} ban chua co task nao.`;
   if (summaryData.total > 0) {
-    summary = `Hôm nay bạn có ${summaryData.total} task, đã hoàn thành ${summaryData.done}, còn ${summaryData.open}. Tổng thời gian dự kiến ${summaryData.total_hours.toFixed(2)} giờ.`;
+    summary = `${datePrefix} ban co ${summaryData.total} task, da hoan thanh ${summaryData.done}, con ${summaryData.open}. Tong thoi gian du kien ${summaryData.total_hours.toFixed(2)} gio.`;
   }
 
   return {
@@ -671,23 +843,23 @@ async function runTodaySummary(db, userId, now) {
   };
 }
 
-async function runQueryByType({ db, userId, now, queryType }) {
+async function runQueryByType({ db, userId, now, queryType, targetDate, explicitDate }) {
   switch (queryType) {
     case "today_unfinished_count":
-      return runTodayUnfinishedCount(db, userId, now);
+      return runTodayUnfinishedCount(db, userId, targetDate, now, explicitDate);
     case "week_total_hours":
-      return runWeekTotalHours(db, userId, now);
+      return runWeekTotalHours(db, userId, targetDate);
     case "high_priority_open":
-      return runHighPriorityOpen(db, userId);
+      return runHighPriorityOpen(db, userId, targetDate, now, explicitDate);
     case "today_task_list":
-      return runTodayTaskList(db, userId, now);
+      return runTodayTaskList(db, userId, targetDate, now, explicitDate);
     case "first_open_task":
-      return runFirstOpenTask(db, userId, now);
+      return runFirstOpenTask(db, userId, targetDate, now, explicitDate);
     case "next_open_task":
-      return runNextOpenTask(db, userId, now);
+      return runNextOpenTask(db, userId, targetDate, now, explicitDate);
     case "today_summary":
     default:
-      return runTodaySummary(db, userId, now);
+      return runTodaySummary(db, userId, targetDate, now, explicitDate);
   }
 }
 
@@ -695,18 +867,32 @@ export const queryDataWorkflow = [
   {
     name: "resolve_query_type",
     run: async (ctx) => {
+      ctx.state.targetDateContext = resolveTargetDate({
+        entities: ctx.entities,
+        text: ctx.text,
+        now: ctx.now,
+      });
       ctx.state.queryType = await resolveQueryType({ text: ctx.text, now: ctx.now });
-      return { query_type: ctx.state.queryType };
+      return {
+        query_type: ctx.state.queryType,
+        target_date: ctx.state.targetDateContext.date,
+        explicit_date: ctx.state.targetDateContext.explicit,
+      };
     },
   },
   {
     name: "run_query",
     run: async (ctx) => {
+      const targetDate = ctx.state.targetDateContext?.date || toDateString(ctx.now);
+      const explicitDate = Boolean(ctx.state.targetDateContext?.explicit);
+
       ctx.state.queryPayload = await runQueryByType({
         db: ctx.db,
         userId: ctx.userId,
         now: ctx.now,
         queryType: ctx.state.queryType,
+        targetDate,
+        explicitDate,
       });
 
       return {

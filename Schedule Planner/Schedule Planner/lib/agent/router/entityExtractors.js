@@ -380,6 +380,64 @@ function inferCreateTaskTitle(normalizedText) {
   return null;
 }
 
+function stripUpdateCommandPrefix(value) {
+  const cleaned = cleanupTitle(value);
+  if (!cleaned) {
+    return null;
+  }
+
+  const stripped = cleaned
+    .replace(
+      /^(?:task\s+)?(?:danh dau|đánh dấu|cap nhat|cập nhật|sua|sửa|doi|đổi|chuyen|chuyển)\s+/iu,
+      ""
+    )
+    .trim();
+
+  if (!stripped) {
+    return null;
+  }
+
+  const normalized = normalizeForMatch(stripped);
+  if (["toi", "minh", "em", "anh", "chi", "ban", "no"].includes(normalized)) {
+    return null;
+  }
+
+  return stripped;
+}
+
+function inferUpdateTaskTitle(text) {
+  const patterns = [
+    /^(.+?)\s+(?:da\s+)?(?:xong(?:\s+rồi|\s+roi)?|hoàn thành|hoan thanh|done|completed|finish(?:ed)?)\s*$/iu,
+    /^(.+?)\s+(?:đang làm|dang lam|doing|in progress)\s*$/iu,
+    /^(.+?)\s+(?:chưa làm|chua lam|chưa xong|chua xong|todo|to do|pending|not done)\s*$/iu,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const inferred = stripUpdateCommandPrefix(match[1]);
+    if (inferred) {
+      return inferred;
+    }
+  }
+
+  return null;
+}
+
+export function inferUpdateTaskEntitiesFromText(text) {
+  const normalizedText = normalizeForMatch(text);
+  const title = inferUpdateTaskTitle(text);
+  const status = extractStatus(normalizedText);
+
+  return compactObject({
+    title,
+    status,
+  });
+}
+
 function extractDeadlineDate(normalizedText, now) {
   const scopeMatch = normalizedText.match(/\b(?:deadline|den|truoc)\s+(.+)$/);
   if (!scopeMatch?.[1]) {
@@ -402,6 +460,9 @@ export function extractEntities({ text, intent, now = new Date() }) {
   let title = extractTitle(text, intent);
   if (!title && intent === "create_task") {
     title = inferCreateTaskTitle(normalizedText);
+  }
+  if (!title && intent === "update_task") {
+    title = inferUpdateTaskTitle(text);
   }
   const target = extractGoalTarget(normalizedText);
   const count = extractRescheduleCount(normalizedText);

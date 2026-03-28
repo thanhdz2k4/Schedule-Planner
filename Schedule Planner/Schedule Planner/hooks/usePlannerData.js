@@ -301,6 +301,71 @@ export function usePlannerData() {
         return { ok: true };
       },
 
+      addTasksBulk(payloads) {
+        const candidates = Array.isArray(payloads) ? payloads : [];
+        if (!candidates.length) {
+          return { ok: false, added: 0, skipped: 0, total: 0, addedTaskIds: [] };
+        }
+
+        const next = { ...state, tasks: [...state.tasks] };
+        const addedTaskIds = [];
+        let skipped = 0;
+
+        for (const payload of candidates) {
+          if (!payload || typeof payload !== "object") {
+            skipped += 1;
+            continue;
+          }
+
+          const title = typeof payload.title === "string" ? payload.title.trim() : "";
+          if (!title) {
+            skipped += 1;
+            continue;
+          }
+
+          if (
+            typeof payload.date !== "string" ||
+            typeof payload.start !== "string" ||
+            typeof payload.end !== "string"
+          ) {
+            skipped += 1;
+            continue;
+          }
+
+          if (!/^\d{2}:\d{2}$/.test(payload.start) || !/^\d{2}:\d{2}$/.test(payload.end)) {
+            skipped += 1;
+            continue;
+          }
+
+          if (toMinutes(payload.end) <= toMinutes(payload.start)) {
+            skipped += 1;
+            continue;
+          }
+
+          const normalized = { ...payload, title };
+          if (hasOverlap(next.tasks, normalized)) {
+            skipped += 1;
+            continue;
+          }
+
+          const taskId = crypto.randomUUID();
+          next.tasks.push({ id: taskId, ...normalized });
+          addedTaskIds.push(taskId);
+        }
+
+        if (addedTaskIds.length > 0) {
+          setState(next);
+        }
+
+        return {
+          ok: addedTaskIds.length > 0,
+          added: addedTaskIds.length,
+          skipped,
+          total: candidates.length,
+          addedTaskIds,
+        };
+      },
+
       updateTask(id, payload) {
         const next = { ...state, tasks: [...state.tasks] };
         if (hasOverlap(next.tasks, payload, id)) {

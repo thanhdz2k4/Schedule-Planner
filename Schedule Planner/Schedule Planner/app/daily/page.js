@@ -5,12 +5,13 @@ import Image from "next/image";
 import AppShell from "@/components/AppShell";
 import { usePlannerData } from "@/hooks/usePlannerData";
 import { useUiLocale } from "@/hooks/useUiLocale";
-import { toMinutes, todayISO } from "@/lib/plannerStore";
+import { hasOverlap, toHHMM, toMinutes, todayISO } from "@/lib/plannerStore";
 import cancelIcon from "@/images/icons8-cancel-240.png";
 
 const HOUR_HEIGHT = 36;
 const TIMELINE_GUTTER = 74;
 const TIMELINE_RIGHT_PADDING = 22;
+const MINUTES_PER_DAY = 24 * 60;
 const WEEKDAY_SHORT_BY_LOCALE = {
   vi: ["CN", "T2", "T3", "T4", "T5", "T6", "T7"],
   en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -81,6 +82,20 @@ const COPY = {
     updateTask: "Cập nhật task",
     viewing: "Đang xem",
     quickEditHint: "Double-click vào task để mở sửa nhanh.",
+    shortcutHint: "Click để chọn task (Ctrl/Cmd+Click để chọn nhiều). Delete để xóa, Ctrl+D để duplicate, Ctrl+C rồi Ctrl+V để dán nhiều lần sang ngày ở ô date.",
+    selectedPrefix: "Đã chọn",
+    clipboardPrefix: "Clipboard",
+    clipboardEmpty: "trống",
+    copyNeedSelectionAlert: "Hãy chọn ít nhất 1 task để copy.",
+    duplicateNeedSelectionAlert: "Hãy chọn ít nhất 1 task để duplicate.",
+    clipboardEmptyAlert: "Clipboard chưa có task để dán.",
+    duplicateNoSlotAlert: "Không còn khung giờ trống để duplicate trong cùng ngày.",
+    duplicateSuccess: "Đã duplicate",
+    duplicateFailSuffix: "task không thể duplicate do trùng giờ hoặc hết chỗ.",
+    copiedPrefix: "Đã copy",
+    pastedPrefix: "Đã dán",
+    pastedFailSuffix: "task không thể dán do trùng giờ.",
+    deletedPrefix: "Đã xóa",
     goalPrefix: "Mục tiêu",
     completedLabel: "Hoàn thành",
     edit: "Sửa",
@@ -116,6 +131,20 @@ const COPY = {
     updateTask: "Update task",
     viewing: "Viewing",
     quickEditHint: "Double-click a task to quick edit.",
+    shortcutHint: "Click to select tasks (Ctrl/Cmd+Click for multi-select). Delete removes selected tasks. Ctrl+D duplicates in the same day. Ctrl+C and Ctrl+V can paste repeatedly to the date field.",
+    selectedPrefix: "Selected",
+    clipboardPrefix: "Clipboard",
+    clipboardEmpty: "empty",
+    copyNeedSelectionAlert: "Select at least one task to copy.",
+    duplicateNeedSelectionAlert: "Select at least one task to duplicate.",
+    clipboardEmptyAlert: "Clipboard is empty.",
+    duplicateNoSlotAlert: "No available slot to duplicate selected tasks on the same day.",
+    duplicateSuccess: "Duplicated",
+    duplicateFailSuffix: "tasks could not be duplicated because of overlap or no free slot.",
+    copiedPrefix: "Copied",
+    pastedPrefix: "Pasted",
+    pastedFailSuffix: "tasks could not be pasted because of overlap.",
+    deletedPrefix: "Deleted",
     goalPrefix: "Goal",
     completedLabel: "Complete",
     edit: "Edit",
@@ -217,6 +246,127 @@ function localizeActionMessage(message, locale, copy) {
   return message;
 }
 
+function isEditableTarget(target) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName;
+  return (
+    target.isContentEditable ||
+    tagName === "INPUT" ||
+    tagName === "TEXTAREA" ||
+    tagName === "SELECT"
+  );
+}
+
+function isDateFieldTarget(target) {
+  return target instanceof HTMLInputElement && target.type === "date";
+}
+
+function isTaskControlTarget(target) {
+  return target instanceof HTMLElement && Boolean(target.closest("button, input, label, select, textarea"));
+}
+
+function isDeleteShortcut(event) {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+    return false;
+  }
+
+  const key = typeof event.key === "string" ? event.key.toLowerCase() : "";
+  return (
+    key === "delete" ||
+    key === "del" ||
+    key === "backspace" ||
+    event.code === "Delete" ||
+    event.code === "Backspace"
+  );
+}
+
+function blurEditableActiveElement() {
+  if (typeof document === "undefined") return;
+  const active = document.activeElement;
+  if (isEditableTarget(active) && active instanceof HTMLElement) {
+    active.blur();
+  }
+}
+
+function toUtcMidnightMs(isoDate) {
+  const date = parseISODate(isoDate);
+  if (!date) return null;
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getDateOffsetDays(baseDate, targetDate) {
+  const base = toUtcMidnightMs(baseDate);
+  const target = toUtcMidnightMs(targetDate);
+  if (base === null || target === null) return 0;
+  return Math.round((target - base) / 86400000);
+}
+
+function shiftISODateByDays(isoDate, deltaDays) {
+  const parsed = parseISODate(isoDate);
+  if (!parsed) return isoDate;
+  return toISODate(addDays(parsed, deltaDays));
+}
+
+function sortTasksByDateAndStart(tasks) {
+  return [...tasks].sort((a, b) => a.date.localeCompare(b.date) || toMinutes(a.start) - toMinutes(b.start));
+}
+
+function buildCopiedAlert(locale, copy, count) {
+  if (locale === "en") {
+    return `${copy.copiedPrefix} ${count} ${getTaskWord(locale, count)}.`;
+  }
+  return `${copy.copiedPrefix} ${count} task.`;
+}
+
+function buildDuplicateAlert(locale, copy, added, total, skipped) {
+  if (added <= 0) {
+    return copy.duplicateNoSlotAlert;
+  }
+
+  if (skipped > 0) {
+    if (locale === "en") {
+      return `${copy.duplicateSuccess} ${added}/${total} tasks. ${skipped} ${copy.duplicateFailSuffix}`;
+    }
+    return `${copy.duplicateSuccess} ${added}/${total} task. ${skipped} ${copy.duplicateFailSuffix}`;
+  }
+
+  if (locale === "en") {
+    return `${copy.duplicateSuccess} ${added} ${getTaskWord(locale, added)}.`;
+  }
+  return `${copy.duplicateSuccess} ${added} task.`;
+}
+
+function buildPasteAlert(locale, copy, added, total, skipped, targetDate) {
+  const dateLabel = formatDisplayDate(targetDate, locale);
+  if (added <= 0) {
+    return locale === "en"
+      ? `No tasks pasted to ${dateLabel}.`
+      : `Không dán được task nào vào ngày ${dateLabel}.`;
+  }
+
+  if (skipped > 0) {
+    if (locale === "en") {
+      return `${copy.pastedPrefix} ${added}/${total} tasks to ${dateLabel}. ${skipped} ${copy.pastedFailSuffix}`;
+    }
+    return `${copy.pastedPrefix} ${added}/${total} task vào ngày ${dateLabel}. ${skipped} ${copy.pastedFailSuffix}`;
+  }
+
+  if (locale === "en") {
+    return `${copy.pastedPrefix} ${added} ${getTaskWord(locale, added)} to ${dateLabel}.`;
+  }
+  return `${copy.pastedPrefix} ${added} task vào ngày ${dateLabel}.`;
+}
+
+function buildDeletedAlert(locale, copy, count) {
+  if (locale === "en") {
+    return `${copy.deletedPrefix} ${count} ${getTaskWord(locale, count)}.`;
+  }
+  return `${copy.deletedPrefix} ${count} task.`;
+}
+
 function getDayWeekRangeDates(mode, anchorISODate, locale) {
   const anchor = parseISODate(anchorISODate) || parseISODate(todayISO()) || new Date();
   const weekdays = WEEKDAY_SHORT_BY_LOCALE[locale] || WEEKDAY_SHORT_BY_LOCALE.vi;
@@ -287,6 +437,10 @@ export default function DailyPage() {
   const [drag, setDrag] = useState(null);
   const [justCompletedTaskId, setJustCompletedTaskId] = useState("");
   const [justCompletedCheer, setJustCompletedCheer] = useState("");
+  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+  const [taskClipboard, setTaskClipboard] = useState({ baseDate: todayISO(), tasks: [] });
+  const selectedTaskIdsRef = useRef([]);
+  const taskClipboardRef = useRef({ baseDate: todayISO(), tasks: [] });
   const completionEffectTimeoutRef = useRef(null);
   const alertTimeoutRef = useRef(null);
   const [form, setForm] = useState({
@@ -300,11 +454,24 @@ export default function DailyPage() {
   });
   const copy = COPY[locale] || COPY.vi;
   const cheerMessages = CHEER_MESSAGES_BY_LOCALE[locale] || CHEER_MESSAGES_BY_LOCALE.vi;
+  const selectedTaskIdSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
+  const selectedTaskCount = selectedTaskIds.length;
+  const clipboardTaskCount = taskClipboard.tasks.length;
+
+  function updateSelectedTaskIds(nextOrUpdater) {
+    setSelectedTaskIds((prev) => {
+      const next = typeof nextOrUpdater === "function" ? nextOrUpdater(prev) : nextOrUpdater;
+      const normalized = Array.isArray(next) ? next : [];
+      selectedTaskIdsRef.current = normalized;
+      return normalized;
+    });
+  }
 
   const goalTitleById = useMemo(
     () => new Map(state.goals.map((goal) => [goal.id, goal.title])),
     [state.goals]
   );
+  const taskById = useMemo(() => new Map(state.tasks.map((task) => [task.id, task])), [state.tasks]);
   const monthBoard = useMemo(() => buildMonthBoard(form.date, locale), [form.date, locale]);
   const monthTasksByDate = useMemo(() => {
     const map = new Map();
@@ -381,6 +548,14 @@ export default function DailyPage() {
   );
 
   useEffect(() => {
+    selectedTaskIdsRef.current = selectedTaskIds;
+  }, [selectedTaskIds]);
+
+  useEffect(() => {
+    taskClipboardRef.current = taskClipboard;
+  }, [taskClipboard]);
+
+  useEffect(() => {
     if (!alert) {
       if (alertTimeoutRef.current) {
         clearTimeout(alertTimeoutRef.current);
@@ -429,6 +604,67 @@ export default function DailyPage() {
       setTimelineMode("week");
     }
   }, [timelineMode]);
+
+  useEffect(() => {
+    const taskIdSet = new Set(state.tasks.map((task) => task.id));
+    setSelectedTaskIds((prev) => {
+      const next = prev.filter((taskId) => taskIdSet.has(taskId));
+      const normalized = next.length === prev.length ? prev : next;
+      selectedTaskIdsRef.current = normalized;
+      return normalized;
+    });
+  }, [state.tasks]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function onKeyDown(event) {
+      const isEditingField = isEditableTarget(event.target);
+      const key = typeof event.key === "string" ? event.key.toLowerCase() : "";
+      const selectedIds = selectedTaskIdsRef.current;
+      const clipboardTasks = taskClipboardRef.current?.tasks || [];
+
+      if (isDeleteShortcut(event) && !isEditingField) {
+        if (!selectedIds.length) return;
+        event.preventDefault();
+        deleteSelectedTasks(selectedIds);
+        return;
+      }
+
+      const isShortcut = event.ctrlKey || event.metaKey;
+      const allowPasteOnDateField = key === "v" && isDateFieldTarget(event.target);
+      if (!isShortcut || event.altKey || event.shiftKey || (isEditingField && !allowPasteOnDateField)) {
+        return;
+      }
+
+      if (event.repeat && key === "d") {
+        return;
+      }
+
+      if (key === "c") {
+        if (!selectedIds.length) return;
+        event.preventDefault();
+        copySelectedTasks(selectedIds);
+        return;
+      }
+
+      if (key === "d") {
+        if (!selectedIds.length) return;
+        event.preventDefault();
+        duplicateSelectedTasks(selectedIds);
+        return;
+      }
+
+      if (key === "v") {
+        if (!clipboardTasks.length) return;
+        event.preventDefault();
+        pasteClipboardToDate();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [form.date, state.tasks, actions, locale, copy, editingId]);
 
   if (!loaded) return null;
 
@@ -479,6 +715,7 @@ export default function DailyPage() {
 
   function onEdit(task) {
     setEditingId(task.id);
+    updateSelectedTaskIds([task.id]);
     setForm({
       date: task.date,
       title: task.title,
@@ -494,6 +731,168 @@ export default function DailyPage() {
     setEditingId("");
     setAlert("");
     setForm({ ...form, title: "", start: "08:00", end: "09:00", status: "todo", priority: "medium", goalId: "" });
+  }
+
+  function getSelectedTasks(taskIds = selectedTaskIds) {
+    return sortTasksByDateAndStart(
+      taskIds
+        .map((taskId) => taskById.get(taskId))
+        .filter(Boolean)
+    );
+  }
+
+  function copySelectedTasks(taskIds = selectedTaskIds) {
+    const selectedTasks = getSelectedTasks(taskIds);
+    if (!selectedTasks.length) {
+      setAlert(copy.copyNeedSelectionAlert);
+      return;
+    }
+
+    const baseDate = selectedTasks[0].date;
+    const clipboardTasks = selectedTasks.map((task) => ({
+      date: task.date,
+      title: task.title,
+      start: task.start,
+      end: task.end,
+      status: task.status,
+      priority: task.priority,
+      goalId: task.goalId || "",
+    }));
+
+    const nextClipboard = { baseDate, tasks: clipboardTasks };
+    setTaskClipboard(nextClipboard);
+    taskClipboardRef.current = nextClipboard;
+    setAlert(buildCopiedAlert(locale, copy, clipboardTasks.length));
+  }
+
+  function buildDuplicatePayloads(tasks) {
+    const stagedTasks = [...state.tasks];
+    const payloads = [];
+    let skipped = 0;
+
+    for (const task of tasks) {
+      const duration = Math.max(0, toMinutes(task.end) - toMinutes(task.start));
+      if (duration <= 0 || duration >= MINUTES_PER_DAY) {
+        skipped += 1;
+        continue;
+      }
+
+      let nextStart = Math.min(MINUTES_PER_DAY - duration, toMinutes(task.end));
+      let placed = false;
+
+      while (nextStart + duration <= MINUTES_PER_DAY) {
+        const candidate = {
+          date: task.date,
+          title: task.title,
+          start: toHHMM(nextStart),
+          end: toHHMM(nextStart + duration),
+          status: task.status,
+          priority: task.priority,
+          goalId: task.goalId || "",
+        };
+
+        if (!hasOverlap(stagedTasks, candidate)) {
+          stagedTasks.push({ ...candidate, id: `draft-${task.id}-${nextStart}` });
+          payloads.push(candidate);
+          placed = true;
+          break;
+        }
+
+        nextStart += 30;
+      }
+
+      if (!placed) {
+        skipped += 1;
+      }
+    }
+
+    return { payloads, skipped };
+  }
+
+  function duplicateSelectedTasks(taskIds = selectedTaskIds) {
+    const selectedTasks = getSelectedTasks(taskIds);
+    if (!selectedTasks.length) {
+      setAlert(copy.duplicateNeedSelectionAlert);
+      return;
+    }
+
+    const { payloads, skipped: preSkipped } = buildDuplicatePayloads(selectedTasks);
+    const result = actions.addTasksBulk(payloads);
+    const added = result.added || 0;
+    const skipped = preSkipped + (result.skipped || 0);
+    const total = selectedTasks.length;
+
+    if (added > 0 && Array.isArray(result.addedTaskIds) && result.addedTaskIds.length > 0) {
+      updateSelectedTaskIds(result.addedTaskIds);
+    }
+
+    setAlert(buildDuplicateAlert(locale, copy, added, total, skipped));
+  }
+
+  function pasteClipboardToDate() {
+    const clipboardTasks = taskClipboard.tasks || [];
+    if (!clipboardTasks.length) {
+      setAlert(copy.clipboardEmptyAlert);
+      return;
+    }
+
+    const targetDate = form.date;
+    const payloads = clipboardTasks.map((task) => {
+      const dayOffset = getDateOffsetDays(taskClipboard.baseDate, task.date);
+      return {
+        ...task,
+        date: shiftISODateByDays(targetDate, dayOffset),
+      };
+    });
+
+    const result = actions.addTasksBulk(payloads);
+    if (result.added > 0 && Array.isArray(result.addedTaskIds) && result.addedTaskIds.length > 0) {
+      updateSelectedTaskIds(result.addedTaskIds);
+      setEditingId("");
+    }
+
+    setAlert(buildPasteAlert(locale, copy, result.added || 0, result.total || payloads.length, result.skipped || 0, targetDate));
+  }
+
+  function onTaskSelect(event, task, options = {}) {
+    if (!options.allowButtonTarget && isTaskControlTarget(event.target)) {
+      return;
+    }
+
+    blurEditableActiveElement();
+
+    const isMultiSelect = event.ctrlKey || event.metaKey;
+    updateSelectedTaskIds((prev) => {
+      const exists = prev.includes(task.id);
+
+      if (isMultiSelect) {
+        return exists ? prev.filter((taskId) => taskId !== task.id) : [...prev, task.id];
+      }
+
+      if (exists && prev.length === 1) {
+        return prev;
+      }
+
+      return [task.id];
+    });
+  }
+
+  function deleteSelectedTasks(taskIds = selectedTaskIds) {
+    const selectedTasks = getSelectedTasks(taskIds);
+    if (!selectedTasks.length) {
+      return;
+    }
+
+    for (const task of selectedTasks) {
+      actions.deleteTask(task.id);
+    }
+
+    if (editingId && selectedTasks.some((task) => task.id === editingId)) {
+      setEditingId("");
+    }
+
+    updateSelectedTaskIds([]);
+    setAlert(buildDeletedAlert(locale, copy, selectedTasks.length));
   }
 
   function onToggleTaskDone(taskId, checked) {
@@ -521,8 +920,7 @@ export default function DailyPage() {
   }
 
   function onDragStart(event, task) {
-    const target = event.target;
-    if (target instanceof HTMLElement && target.closest("button, input, label")) {
+    if (isTaskControlTarget(event.target)) {
       return;
     }
     event.preventDefault();
@@ -660,12 +1058,6 @@ export default function DailyPage() {
             {alert}
           </p>
         ) : null}
-        <div className="timeline-summary">
-          <p className="muted" style={{ marginTop: 8 }}>
-            {copy.viewing}: {rangeLabel}. {copy.quickEditHint}
-          </p>
-        </div>
-
         <div className="daily-grid-shell">
           {timelineMode === "month" ? (
             <div className="month-table-wrap">
@@ -695,9 +1087,10 @@ export default function DailyPage() {
                           <button
                             key={task.id}
                             type="button"
-                            className={`month-task-chip priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}`}
+                            className={`month-task-chip priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}${selectedTaskIdSet.has(task.id) ? " selected" : ""}`}
                             data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
-                            onClick={() => onEdit(task)}
+                            onClick={(event) => onTaskSelect(event, task, { allowButtonTarget: true })}
+                            onDoubleClick={() => onEdit(task)}
                             title={`${task.start}-${task.end} | ${task.title} (${getStatusLabel(locale, task.status)}, ${copy.priorityWord} ${getPriorityLabel(locale, task.priority)})`}
                           >
                             <span className="month-task-time">{task.start}</span>
@@ -762,11 +1155,15 @@ export default function DailyPage() {
                     return (
                       <article
                         key={task.id}
-                        className={`task-card priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}${isCompact ? " compact" : ""}${isTiny ? " tiny" : ""}${isRangeMode && isTiny ? " week-tiny" : ""}${editingId === task.id ? " editing" : ""}`}
+                        className={`task-card priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}${isCompact ? " compact" : ""}${isTiny ? " tiny" : ""}${isRangeMode && isTiny ? " week-tiny" : ""}${editingId === task.id ? " editing" : ""}${selectedTaskIdSet.has(task.id) ? " selected" : ""}`}
                         data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
                         style={getTaskStyle(task, top, height)}
-                        onPointerDown={(event) => onDragStart(event, task)}
+                        onPointerDown={(event) => {
+                          onTaskSelect(event, task);
+                          onDragStart(event, task);
+                        }}
                         onDoubleClick={() => onEdit(task)}
+                        aria-selected={selectedTaskIdSet.has(task.id)}
                       >
                       {isRangeMode && isTiny ? (
                         <div className="task-week-mini">
@@ -800,13 +1197,6 @@ export default function DailyPage() {
                             <div className="task-action-buttons">
                               <button className="task-action-btn" type="button" onClick={() => onEdit(task)}>
                                 {copy.edit}
-                              </button>
-                              <button
-                                className="task-action-btn danger"
-                                type="button"
-                                onClick={() => actions.deleteTask(task.id)}
-                              >
-                                {copy.delete}
                               </button>
                               {editingId === task.id ? (
                                 <button
@@ -862,13 +1252,6 @@ export default function DailyPage() {
                           <div className="task-action-buttons">
                             <button className="task-action-btn" type="button" onClick={() => onEdit(task)}>
                               {copy.edit}
-                            </button>
-                            <button
-                              className="task-action-btn danger"
-                              type="button"
-                              onClick={() => actions.deleteTask(task.id)}
-                            >
-                              {copy.delete}
                             </button>
                             {editingId === task.id ? (
                               <button

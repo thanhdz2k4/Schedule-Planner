@@ -116,6 +116,16 @@ function normalizePriority(rawPriority) {
   return rawPriority;
 }
 
+function hasInputValue(value) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+  return true;
+}
+
 function validateTimeWindow(start, end) {
   if (!isValidTime(start) || !isValidTime(end)) {
     throw new BusinessError("start/end time must use HH:mm format.", {
@@ -209,7 +219,15 @@ export function validateUpdateTaskPatch(entities, existingTask) {
 
   const shouldRecheckOverlap = Boolean(taskPatch.date || taskPatch.start || taskPatch.end);
   const hasReminderPatch = reminderOffset !== undefined;
-  if (!Object.keys(taskPatch).length && !hasReminderPatch) {
+  const hasExplicitPatchInput =
+    hasInputValue(entities?.date) ||
+    hasInputValue(entities?.start) ||
+    hasInputValue(entities?.end) ||
+    hasInputValue(entities?.status) ||
+    hasInputValue(entities?.priority) ||
+    hasInputValue(entities?.minutes_before);
+
+  if (!Object.keys(taskPatch).length && !hasReminderPatch && !hasExplicitPatchInput) {
     throw new BusinessError("update_task needs at least one patch field.", {
       code: "EMPTY_PATCH",
       status: 400,

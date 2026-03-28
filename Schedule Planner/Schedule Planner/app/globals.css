@@ -23,6 +23,9 @@
   --ring: rgba(14, 111, 93, 0.2);
   --shadow: 0 24px 52px rgba(40, 62, 36, 0.16);
   --shadow-soft: 0 10px 24px rgba(40, 62, 36, 0.08);
+  --cursor-default: url("../images/icons8-pointer-48.png") 7 5, auto;
+  --cursor-pointer: url("../images/icons8-pointer-48.png") 7 3, pointer;
+  --cursor-text: url("../images/icons8-hand-cursor-48.png") 7 3, text;
 }
 
 body.dark {
@@ -62,6 +65,7 @@ html,
 body {
   margin: 0;
   min-height: 100%;
+  cursor: var(--cursor-default);
 }
 
 body {
@@ -107,6 +111,37 @@ select,
 textarea,
 button {
   font: inherit;
+}
+
+a,
+button,
+[role="button"],
+summary,
+label,
+.task-card,
+.month-task-chip {
+  cursor: var(--cursor-pointer) !important;
+}
+
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+input[type="url"],
+input[type="tel"],
+input[type="date"],
+input[type="time"],
+input[type="number"],
+textarea {
+  cursor: var(--cursor-text);
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed !important;
 }
 
 .app-shell {
@@ -1772,6 +1807,43 @@ body.dark .brand-dot {
   padding: 0;
 }
 
+.task-context-menu {
+  position: fixed;
+  z-index: 1300;
+  min-width: 140px;
+  border: 1px solid var(--line-strong);
+  background: #ffffff;
+  box-shadow: 0 14px 28px rgba(42, 59, 39, 0.2);
+  padding: 4px;
+  display: grid;
+  gap: 2px;
+}
+
+.task-context-menu button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+
+.task-context-menu button:hover {
+  border-color: var(--line);
+  background: var(--surface-soft);
+}
+
+.task-context-menu button.danger {
+  color: var(--danger);
+}
+
+.task-context-menu button.danger:hover {
+  border-color: rgba(175, 63, 79, 0.45);
+  background: rgba(255, 237, 240, 0.86);
+}
+
 .task-check.tiny {
   gap: 0;
 }
@@ -2832,6 +2904,30 @@ body.dark .task-action-btn.danger:hover {
   border-color: #ff9eaa;
 }
 
+body.dark .task-context-menu {
+  background: #2a3c30;
+  border-color: #58725f;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.34);
+}
+
+body.dark .task-context-menu button {
+  color: #e3efe3;
+}
+
+body.dark .task-context-menu button:hover {
+  border-color: #58725f;
+  background: #34493c;
+}
+
+body.dark .task-context-menu button.danger {
+  color: #ffb6c2;
+}
+
+body.dark .task-context-menu button.danger:hover {
+  border-color: rgba(255, 158, 170, 0.55);
+  background: rgba(81, 43, 49, 0.7);
+}
+
 body.dark .dot {
   border-color: #233428;
   box-shadow: 0 0 0 4px rgba(64, 198, 171, 0.22);
@@ -3331,6 +3427,16 @@ body.dark .dot {
   .daily-timeline-panel .timeline:not(.timeline-range) .task-card.tiny .task-action-btn {
     padding: 1px 5px;
     font-size: 0.58rem;
+  }
+
+  .task-context-menu {
+    min-width: 126px;
+    padding: 3px;
+  }
+
+  .task-context-menu button {
+    font-size: 0.74rem;
+    padding: 6px 8px;
   }
 }
 

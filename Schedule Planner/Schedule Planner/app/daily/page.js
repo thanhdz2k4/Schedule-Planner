@@ -100,6 +100,9 @@ const COPY = {
     completedLabel: "Hoàn thành",
     edit: "Sửa",
     delete: "Xóa",
+    contextCopy: "Sao chép",
+    contextDuplicate: "Nhân đôi",
+    contextDelete: "Xóa",
     cancelEdit: "Hủy sửa task",
     doneCheckTitle: "Đánh dấu hoàn thành",
     priorityWord: "ưu tiên",
@@ -149,6 +152,9 @@ const COPY = {
     completedLabel: "Complete",
     edit: "Edit",
     delete: "Delete",
+    contextCopy: "Copy",
+    contextDuplicate: "Duplicate",
+    contextDelete: "Delete",
     cancelEdit: "Cancel editing task",
     doneCheckTitle: "Mark as done",
     priorityWord: "priority",
@@ -439,8 +445,10 @@ export default function DailyPage() {
   const [justCompletedCheer, setJustCompletedCheer] = useState("");
   const [selectedTaskIds, setSelectedTaskIds] = useState([]);
   const [taskClipboard, setTaskClipboard] = useState({ baseDate: todayISO(), tasks: [] });
+  const [taskContextMenu, setTaskContextMenu] = useState(null);
   const selectedTaskIdsRef = useRef([]);
   const taskClipboardRef = useRef({ baseDate: todayISO(), tasks: [] });
+  const taskContextMenuRef = useRef(null);
   const completionEffectTimeoutRef = useRef(null);
   const alertTimeoutRef = useRef(null);
   const [form, setForm] = useState({
@@ -465,6 +473,21 @@ export default function DailyPage() {
       selectedTaskIdsRef.current = normalized;
       return normalized;
     });
+  }
+
+  function getNextSelectedIdsForTask(taskId, isMultiSelect, currentIds) {
+    const ids = Array.isArray(currentIds) ? currentIds : [];
+    const exists = ids.includes(taskId);
+
+    if (isMultiSelect) {
+      return exists ? ids.filter((id) => id !== taskId) : [...ids, taskId];
+    }
+
+    if (exists && ids.length === 1) {
+      return ids;
+    }
+
+    return [taskId];
   }
 
   const goalTitleById = useMemo(
@@ -556,6 +579,38 @@ export default function DailyPage() {
   }, [taskClipboard]);
 
   useEffect(() => {
+    if (!taskContextMenu) {
+      return undefined;
+    }
+
+    function closeOnPointerDown(event) {
+      if (!(event.target instanceof Node)) {
+        setTaskContextMenu(null);
+        return;
+      }
+
+      if (taskContextMenuRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setTaskContextMenu(null);
+    }
+
+    function closeMenu() {
+      setTaskContextMenu(null);
+    }
+
+    window.addEventListener("pointerdown", closeOnPointerDown, true);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    return () => {
+      window.removeEventListener("pointerdown", closeOnPointerDown, true);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+  }, [taskContextMenu]);
+
+  useEffect(() => {
     if (!alert) {
       if (alertTimeoutRef.current) {
         clearTimeout(alertTimeoutRef.current);
@@ -613,6 +668,12 @@ export default function DailyPage() {
       selectedTaskIdsRef.current = normalized;
       return normalized;
     });
+
+    setTaskContextMenu((prev) => {
+      if (!prev) return null;
+      const taskIds = Array.isArray(prev.taskIds) ? prev.taskIds : [];
+      return taskIds.some((taskId) => taskIdSet.has(taskId)) ? prev : null;
+    });
   }, [state.tasks]);
 
   useEffect(() => {
@@ -624,9 +685,14 @@ export default function DailyPage() {
       const selectedIds = selectedTaskIdsRef.current;
       const clipboardTasks = taskClipboardRef.current?.tasks || [];
 
+      if (key === "escape") {
+        setTaskContextMenu(null);
+      }
+
       if (isDeleteShortcut(event) && !isEditingField) {
         if (!selectedIds.length) return;
         event.preventDefault();
+        setTaskContextMenu(null);
         deleteSelectedTasks(selectedIds);
         return;
       }
@@ -644,6 +710,7 @@ export default function DailyPage() {
       if (key === "c") {
         if (!selectedIds.length) return;
         event.preventDefault();
+        setTaskContextMenu(null);
         copySelectedTasks(selectedIds);
         return;
       }
@@ -651,6 +718,7 @@ export default function DailyPage() {
       if (key === "d") {
         if (!selectedIds.length) return;
         event.preventDefault();
+        setTaskContextMenu(null);
         duplicateSelectedTasks(selectedIds);
         return;
       }
@@ -658,6 +726,7 @@ export default function DailyPage() {
       if (key === "v") {
         if (!clipboardTasks.length) return;
         event.preventDefault();
+        setTaskContextMenu(null);
         pasteClipboardToDate();
       }
     }
@@ -854,27 +923,66 @@ export default function DailyPage() {
     setAlert(buildPasteAlert(locale, copy, result.added || 0, result.total || payloads.length, result.skipped || 0, targetDate));
   }
 
+  function onTaskContextMenu(event, task, options = {}) {
+    if (!options.allowButtonTarget && isTaskControlTarget(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    blurEditableActiveElement();
+
+    const isMultiSelect = event.ctrlKey || event.metaKey;
+    const currentSelectedIds = selectedTaskIdsRef.current;
+    let nextSelectedIds = [];
+
+    if (!isMultiSelect && currentSelectedIds.includes(task.id) && currentSelectedIds.length > 1) {
+      // Keep current multi-selection when opening context menu on one of selected tasks.
+      nextSelectedIds = currentSelectedIds;
+    } else {
+      nextSelectedIds = getNextSelectedIdsForTask(task.id, isMultiSelect, currentSelectedIds);
+    }
+
+    updateSelectedTaskIds(nextSelectedIds);
+    setTaskContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      taskIds: nextSelectedIds,
+    });
+  }
+
   function onTaskSelect(event, task, options = {}) {
     if (!options.allowButtonTarget && isTaskControlTarget(event.target)) {
       return;
     }
 
     blurEditableActiveElement();
+    setTaskContextMenu(null);
 
     const isMultiSelect = event.ctrlKey || event.metaKey;
-    updateSelectedTaskIds((prev) => {
-      const exists = prev.includes(task.id);
+    updateSelectedTaskIds((prev) => getNextSelectedIdsForTask(task.id, isMultiSelect, prev));
+  }
 
-      if (isMultiSelect) {
-        return exists ? prev.filter((taskId) => taskId !== task.id) : [...prev, task.id];
-      }
+  function runTaskContextAction(action) {
+    const targetIds =
+      taskContextMenu && Array.isArray(taskContextMenu.taskIds) && taskContextMenu.taskIds.length
+        ? taskContextMenu.taskIds
+        : selectedTaskIdsRef.current;
 
-      if (exists && prev.length === 1) {
-        return prev;
-      }
+    if (!targetIds.length) {
+      setTaskContextMenu(null);
+      return;
+    }
 
-      return [task.id];
-    });
+    if (action === "copy") {
+      copySelectedTasks(targetIds);
+    } else if (action === "duplicate") {
+      duplicateSelectedTasks(targetIds);
+    } else if (action === "delete") {
+      deleteSelectedTasks(targetIds);
+    }
+
+    setTaskContextMenu(null);
   }
 
   function deleteSelectedTasks(taskIds = selectedTaskIds) {
@@ -1090,6 +1198,7 @@ export default function DailyPage() {
                             className={`month-task-chip priority-${task.priority}${task.status === "done" ? " done" : ""}${justCompletedTaskId === task.id ? " just-done" : ""}${selectedTaskIdSet.has(task.id) ? " selected" : ""}`}
                             data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
                             onClick={(event) => onTaskSelect(event, task, { allowButtonTarget: true })}
+                            onContextMenu={(event) => onTaskContextMenu(event, task, { allowButtonTarget: true })}
                             onDoubleClick={() => onEdit(task)}
                             title={`${task.start}-${task.end} | ${task.title} (${getStatusLabel(locale, task.status)}, ${copy.priorityWord} ${getPriorityLabel(locale, task.priority)})`}
                           >
@@ -1159,9 +1268,13 @@ export default function DailyPage() {
                         data-cheer={justCompletedTaskId === task.id ? justCompletedCheer : undefined}
                         style={getTaskStyle(task, top, height)}
                         onPointerDown={(event) => {
+                          if (event.button !== 0) {
+                            return;
+                          }
                           onTaskSelect(event, task);
                           onDragStart(event, task);
                         }}
+                        onContextMenu={(event) => onTaskContextMenu(event, task)}
                         onDoubleClick={() => onEdit(task)}
                         aria-selected={selectedTaskIdSet.has(task.id)}
                       >
@@ -1275,6 +1388,28 @@ export default function DailyPage() {
             </div>
           )}
         </div>
+        {taskContextMenu ? (
+          <div
+            ref={taskContextMenuRef}
+            className="task-context-menu"
+            role="menu"
+            onContextMenu={(event) => event.preventDefault()}
+            style={{
+              left: `${taskContextMenu.x}px`,
+              top: `${taskContextMenu.y}px`,
+            }}
+          >
+            <button type="button" role="menuitem" onClick={() => runTaskContextAction("copy")}>
+              {copy.contextCopy}
+            </button>
+            <button type="button" role="menuitem" onClick={() => runTaskContextAction("duplicate")}>
+              {copy.contextDuplicate}
+            </button>
+            <button type="button" role="menuitem" className="danger" onClick={() => runTaskContextAction("delete")}>
+              {copy.contextDelete}
+            </button>
+          </div>
+        ) : null}
       </section>
     </AppShell>
   );

@@ -1,5 +1,6 @@
 import { readBearerToken, verifySessionToken } from "@/lib/auth/sessionToken";
 import { resolveUserId } from "@/lib/db/users";
+import { emitSkeddyPlannerStateEvent } from "@/lib/integrations/skeddyBridge";
 import { readPlannerState, writePlannerState } from "@/lib/plannerDb";
 import { syncGoalProgress } from "@/lib/plannerStore";
 import { NextResponse } from "next/server";
@@ -72,7 +73,14 @@ export async function PUT(request) {
 
   try {
     const state = normalizeStateShape(payload);
+    const previous = (await readPlannerState(resolved.userId)) || { tasks: [], goals: [] };
     const saved = await writePlannerState(state, resolved.userId);
+    emitSkeddyPlannerStateEvent({
+      userId: resolved.userId,
+      trigger: "planner_api_put",
+      previousState: previous,
+      nextState: saved,
+    });
     return NextResponse.json(saved);
   } catch (error) {
     console.error("PUT /api/planner failed:", error);

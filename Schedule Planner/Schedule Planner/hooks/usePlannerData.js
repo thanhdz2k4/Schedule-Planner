@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getOrCreateAnonymousUserId } from "@/lib/anonymousUser";
 import { clearAuthSession, loadAuthSession } from "@/lib/authClient";
 import {
@@ -97,6 +97,108 @@ export function usePlannerData() {
   const [authToken, setAuthToken] = useState("");
   const [allowPersist, setAllowPersist] = useState(false);
   const syncErrorShown = useRef(false);
+  const mountedRef = useRef(true);
+  const stateRef = useRef(state);
+  const loadedRef = useRef(loaded);
+  const userIdRef = useRef(userId);
+  const authTokenRef = useRef(authToken);
+  const allowPersistRef = useRef(allowPersist);
+  const pendingPersistRef = useRef(false);
+  const persistInFlightRef = useRef(false);
+  const hasUnsyncedChangesRef = useRef(false);
+  const lastSyncedStateRef = useRef("");
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    loadedRef.current = loaded;
+    userIdRef.current = userId;
+    authTokenRef.current = authToken;
+    allowPersistRef.current = allowPersist;
+  }, [loaded, userId, authToken, allowPersist]);
+
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    []
+  );
+
+  const switchToAnonymousSession = useCallback(() => {
+    clearAuthSession();
+    const anonymousUserId = getOrCreateAnonymousUserId() || "";
+    const nextAllowPersist = Boolean(anonymousUserId);
+
+    userIdRef.current = anonymousUserId;
+    authTokenRef.current = "";
+    allowPersistRef.current = nextAllowPersist;
+    pendingPersistRef.current = false;
+    persistInFlightRef.current = false;
+    hasUnsyncedChangesRef.current = false;
+    lastSyncedStateRef.current = "";
+
+    if (!mountedRef.current) {
+      return;
+    }
+
+    setAuthToken("");
+    setUserId(anonymousUserId);
+    setAllowPersist(nextAllowPersist);
+  }, []);
+
+  const flushPendingPersist = useCallback(async () => {
+    if (persistInFlightRef.current) {
+      return;
+    }
+
+    if (!loadedRef.current || !userIdRef.current || !allowPersistRef.current) {
+      return;
+    }
+
+    persistInFlightRef.current = true;
+
+    try {
+      while (pendingPersistRef.current) {
+        pendingPersistRef.current = false;
+
+        if (!loadedRef.current || !userIdRef.current || !allowPersistRef.current) {
+          hasUnsyncedChangesRef.current = false;
+          return;
+        }
+
+        const snapshot = normalizeStateShape(stateRef.current);
+        const serializedSnapshot = serializeState(snapshot);
+        if (serializedSnapshot === lastSyncedStateRef.current) {
+          hasUnsyncedChangesRef.current = false;
+          continue;
+        }
+
+        try {
+          await saveServerState(userIdRef.current, snapshot, authTokenRef.current);
+          lastSyncedStateRef.current = serializedSnapshot;
+          hasUnsyncedChangesRef.current = pendingPersistRef.current;
+          syncErrorShown.current = false;
+        } catch (error) {
+          if (error?.code === "UNAUTHORIZED") {
+            switchToAnonymousSession();
+            syncErrorShown.current = false;
+            return;
+          }
+
+          hasUnsyncedChangesRef.current = true;
+          if (!syncErrorShown.current) {
+            console.error(error);
+            syncErrorShown.current = true;
+          }
+          return;
+        }
+      }
+    } finally {
+      persistInFlightRef.current = false;
+    }
+  }, [switchToAnonymousSession]);
 
   useEffect(() => {
     let active = true;
@@ -112,12 +214,15 @@ export function usePlannerData() {
       let resolvedUserId = session?.userId || anonymousUserId;
       let resolvedAuthToken = session?.token || "";
       let shouldPersist = Boolean(anonymousUserId) && !session?.token;
+      let nextStateSynced = false;
 
       if (!active) return;
       setUserId(resolvedUserId);
       setAuthToken(resolvedAuthToken);
-      setAllowPersist(shouldPersist);
+      // Prevent an early write before we reconcile local/server state.
+      setAllowPersist(false);
       setState(localState);
+      stateRef.current = localState;
       saveState(localState);
       setDarkMode(dark);
       document.body.classList.toggle("dark", dark);
@@ -128,6 +233,7 @@ export function usePlannerData() {
         try {
           nextState = await fetchServerState(resolvedUserId, resolvedAuthToken);
           shouldPersist = true;
+          nextStateSynced = true;
         } catch (error) {
           if (error?.code === "UNAUTHORIZED") {
             clearAuthSession();
@@ -142,17 +248,21 @@ export function usePlannerData() {
 
               if (hasAnonymousServerData) {
                 nextState = anonymousServerState;
+                nextStateSynced = true;
               } else {
                 await saveServerState(resolvedUserId, localState);
                 nextState = localState;
+                nextStateSynced = true;
               }
             } catch {
               nextState = localState;
+              nextStateSynced = false;
             }
           } else {
             // Keep local data for UX, but do not overwrite account data until fetch succeeds.
             nextState = localState;
             shouldPersist = false;
+            nextStateSynced = false;
           }
         }
       } else {
@@ -163,13 +273,16 @@ export function usePlannerData() {
 
             if (hasServerData) {
               nextState = serverState;
+              nextStateSynced = true;
             } else {
               await saveServerState(resolvedUserId, localState);
               nextState = localState;
+              nextStateSynced = true;
             }
           }
         } catch {
           nextState = localState;
+          nextStateSynced = false;
         }
       }
 
@@ -178,7 +291,17 @@ export function usePlannerData() {
       setAuthToken(resolvedAuthToken);
       setAllowPersist(shouldPersist);
       setState((prev) => (areStatesEqual(prev, nextState) ? prev : nextState));
+      stateRef.current = nextState;
       saveState(nextState);
+      const serializedNextState = serializeState(nextState);
+      if (nextStateSynced) {
+        lastSyncedStateRef.current = serializedNextState;
+        hasUnsyncedChangesRef.current = false;
+      } else {
+        hasUnsyncedChangesRef.current = shouldPersist;
+      }
+      pendingPersistRef.current = false;
+      syncErrorShown.current = false;
     }
 
     bootstrap();
@@ -188,40 +311,20 @@ export function usePlannerData() {
   }, []);
 
   useEffect(() => {
-    if (!loaded || !userId || !allowPersist) return;
-
+    if (!loaded) return;
     saveState(state);
+    if (!userId || !allowPersist) return;
 
-    let active = true;
-    async function persistToServer() {
-      try {
-        await saveServerState(userId, state, authToken);
-        if (active) {
-          syncErrorShown.current = false;
-        }
-      } catch (error) {
-        if (active && error?.code === "UNAUTHORIZED") {
-          clearAuthSession();
-          const anonymousUserId = getOrCreateAnonymousUserId() || "";
-          setAuthToken("");
-          setUserId(anonymousUserId);
-          setAllowPersist(Boolean(anonymousUserId));
-          syncErrorShown.current = false;
-          return;
-        }
-
-        if (active && !syncErrorShown.current) {
-          console.error(error);
-          syncErrorShown.current = true;
-        }
-      }
+    const serialized = serializeState(state);
+    if (serialized === lastSyncedStateRef.current && !pendingPersistRef.current) {
+      hasUnsyncedChangesRef.current = false;
+      return;
     }
 
-    persistToServer();
-    return () => {
-      active = false;
-    };
-  }, [state, loaded, userId, authToken, allowPersist]);
+    pendingPersistRef.current = true;
+    hasUnsyncedChangesRef.current = true;
+    void flushPendingPersist();
+  }, [state, loaded, userId, authToken, allowPersist, flushPendingPersist]);
 
   useEffect(() => {
     if (!loaded || !userId || !authToken) return;
@@ -230,7 +333,7 @@ export function usePlannerData() {
     let syncInFlight = false;
 
     async function pullLatestFromServer() {
-      if (syncInFlight) {
+      if (syncInFlight || persistInFlightRef.current || pendingPersistRef.current || hasUnsyncedChangesRef.current) {
         return;
       }
 
@@ -242,6 +345,8 @@ export function usePlannerData() {
         }
 
         setAllowPersist(true);
+        lastSyncedStateRef.current = serializeState(serverState);
+        hasUnsyncedChangesRef.current = false;
         setState((prev) => (areStatesEqual(prev, serverState) ? prev : serverState));
       } catch (error) {
         if (!active) {
@@ -249,11 +354,7 @@ export function usePlannerData() {
         }
 
         if (error?.code === "UNAUTHORIZED") {
-          clearAuthSession();
-          const anonymousUserId = getOrCreateAnonymousUserId() || "";
-          setAuthToken("");
-          setUserId(anonymousUserId);
-          setAllowPersist(Boolean(anonymousUserId));
+          switchToAnonymousSession();
         }
       } finally {
         syncInFlight = false;
@@ -286,17 +387,19 @@ export function usePlannerData() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [loaded, userId, authToken]);
+  }, [loaded, userId, authToken, switchToAnonymousSession]);
 
   const actions = useMemo(
     () => ({
       addTask(payload) {
-        const next = { ...state, tasks: [...state.tasks] };
+        const current = stateRef.current;
+        const next = { ...current, tasks: [...current.tasks] };
         if (hasOverlap(next.tasks, payload)) {
           return { ok: false, message: "Task bị trùng giờ trong cùng ngày." };
         }
 
         next.tasks.push({ id: crypto.randomUUID(), ...payload });
+        stateRef.current = next;
         setState(next);
         return { ok: true };
       },
@@ -307,7 +410,8 @@ export function usePlannerData() {
           return { ok: false, added: 0, skipped: 0, total: 0, addedTaskIds: [] };
         }
 
-        const next = { ...state, tasks: [...state.tasks] };
+        const current = stateRef.current;
+        const next = { ...current, tasks: [...current.tasks] };
         const addedTaskIds = [];
         let skipped = 0;
 
@@ -354,6 +458,7 @@ export function usePlannerData() {
         }
 
         if (addedTaskIds.length > 0) {
+          stateRef.current = next;
           setState(next);
         }
 
@@ -367,31 +472,40 @@ export function usePlannerData() {
       },
 
       updateTask(id, payload) {
-        const next = { ...state, tasks: [...state.tasks] };
+        const current = stateRef.current;
+        const next = { ...current, tasks: [...current.tasks] };
         if (hasOverlap(next.tasks, payload, id)) {
           return { ok: false, message: "Task bị trùng giờ trong cùng ngày." };
         }
 
         next.tasks = next.tasks.map((task) => (task.id === id ? { ...task, ...payload } : task));
+        stateRef.current = next;
         setState(next);
         return { ok: true };
       },
 
       deleteTask(id) {
-        setState((prev) => ({ ...prev, tasks: prev.tasks.filter((task) => task.id !== id) }));
+        const current = stateRef.current;
+        const next = { ...current, tasks: current.tasks.filter((task) => task.id !== id) };
+        stateRef.current = next;
+        setState(next);
       },
 
       toggleTaskDone(id, checked) {
-        setState((prev) => ({
-          ...prev,
-          tasks: prev.tasks.map((task) =>
+        const current = stateRef.current;
+        const next = {
+          ...current,
+          tasks: current.tasks.map((task) =>
             task.id === id ? { ...task, status: checked ? "done" : "todo" } : task
           ),
-        }));
+        };
+        stateRef.current = next;
+        setState(next);
       },
 
       moveTask(id, deltaMinutes) {
-        const original = state.tasks.find((task) => task.id === id);
+        const current = stateRef.current;
+        const original = current.tasks.find((task) => task.id === id);
         if (!original) return { ok: false };
 
         const duration = taskDurationMinutes(original);
@@ -404,25 +518,37 @@ export function usePlannerData() {
           end: toHHMM(nextStart + duration),
         };
 
-        if (hasOverlap(state.tasks, payload, id)) {
+        if (hasOverlap(current.tasks, payload, id)) {
           return { ok: false, message: "Không thể kéo vì bị trùng giờ." };
         }
 
-        return this.updateTask(id, payload);
+        const next = {
+          ...current,
+          tasks: current.tasks.map((task) => (task.id === id ? { ...task, ...payload } : task)),
+        };
+        stateRef.current = next;
+        setState(next);
+        return { ok: true };
       },
 
       addGoal(payload) {
-        setState((prev) => ({
-          ...prev,
-          goals: [...prev.goals, { id: crypto.randomUUID(), completed: 0, ...payload }],
-        }));
+        const current = stateRef.current;
+        const next = {
+          ...current,
+          goals: [...current.goals, { id: crypto.randomUUID(), completed: 0, ...payload }],
+        };
+        stateRef.current = next;
+        setState(next);
       },
 
       deleteGoal(id) {
-        setState((prev) => ({
-          tasks: prev.tasks.map((task) => (task.goalId === id ? { ...task, goalId: "" } : task)),
-          goals: prev.goals.filter((goal) => goal.id !== id),
-        }));
+        const current = stateRef.current;
+        const next = {
+          tasks: current.tasks.map((task) => (task.goalId === id ? { ...task, goalId: "" } : task)),
+          goals: current.goals.filter((goal) => goal.id !== id),
+        };
+        stateRef.current = next;
+        setState(next);
       },
 
       toggleTheme() {
@@ -432,7 +558,7 @@ export function usePlannerData() {
         localStorage.setItem(THEME_KEY, next ? "dark" : "light");
       },
     }),
-    [state, darkMode]
+    [darkMode]
   );
 
   const computed = useMemo(() => {

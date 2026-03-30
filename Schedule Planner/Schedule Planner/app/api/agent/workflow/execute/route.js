@@ -4,6 +4,7 @@ import { normalizeContext, routeUserText } from "@/lib/agent/router";
 import { withTransaction } from "@/lib/db/client";
 import { ensureMigrations } from "@/lib/db/migrate";
 import { ensureUserExists, resolveUserId } from "@/lib/db/users";
+import { emitSkeddyTaskMutationEvent } from "@/lib/integrations/skeddyBridge";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -124,6 +125,49 @@ async function resolveRouteResult(payload) {
   });
 }
 
+function emitSkeddyMutationFromWorkflow({ userId, text, intent, execution }) {
+  if (!execution?.ok) {
+    return;
+  }
+
+  const result = execution.result || {};
+  if (intent === "create_task") {
+    emitSkeddyTaskMutationEvent({
+      userId,
+      action: "create",
+      source: "agent_workflow_execute",
+      afterTask: result.task || null,
+      intent,
+      inputText: text,
+    });
+    return;
+  }
+
+  if (intent === "update_task") {
+    emitSkeddyTaskMutationEvent({
+      userId,
+      action: "update",
+      source: "agent_workflow_execute",
+      beforeTask: result.before || null,
+      afterTask: result.after || null,
+      intent,
+      inputText: text,
+    });
+    return;
+  }
+
+  if (intent === "delete_task") {
+    emitSkeddyTaskMutationEvent({
+      userId,
+      action: "delete",
+      source: "agent_workflow_execute",
+      beforeTask: result.deleted_task || null,
+      intent,
+      inputText: text,
+    });
+  }
+}
+
 export async function POST(request) {
   let rawPayload;
   try {
@@ -181,6 +225,13 @@ export async function POST(request) {
       intent: routeResult.intent,
       entities: routeResult.entities,
       text: payload.text,
+    });
+
+    emitSkeddyMutationFromWorkflow({
+      userId: payload.userId,
+      text: payload.text,
+      intent: routeResult.intent,
+      execution,
     });
 
     try {

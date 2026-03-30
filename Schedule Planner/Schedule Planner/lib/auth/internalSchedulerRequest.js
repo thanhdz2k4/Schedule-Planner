@@ -36,8 +36,11 @@ function safeEqual(left, right) {
 }
 
 export function isInternalSchedulerAuthorized(request) {
-  const expected = process.env.INTERNAL_SCHEDULER_TOKEN?.trim();
-  if (!expected) {
+  const expectedCandidates = [process.env.INTERNAL_SCHEDULER_TOKEN, process.env.CRON_SECRET]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean);
+
+  if (!expectedCandidates.length) {
     return false;
   }
 
@@ -47,5 +50,5 @@ export function isInternalSchedulerAuthorized(request) {
     return false;
   }
 
-  return safeEqual(actual, expected);
+  return expectedCandidates.some((expected) => safeEqual(actual, expected));
 }

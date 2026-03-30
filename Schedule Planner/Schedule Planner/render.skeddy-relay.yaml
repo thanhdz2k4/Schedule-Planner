@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: skeddy-user-relay
+    runtime: docker
+    plan: free
+    dockerContext: ./skeddy-relay
+    dockerfilePath: ./skeddy-relay/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: SKEDDY_RELAY_PORT
+        value: "8787"
+      - key: SKEDDY_BOT_USERNAME
+        value: "@SkeddyBot"
+      - key: SKEDDY_RELAY_ALLOWED_EVENTS
+        value: "planner_tasks_changed,planner_task_mutation"
+      - key: SKEDDY_RELAY_DRY_RUN
+        value: "false"
+      - key: SKEDDY_RELAY_SEND_DELAY_MS
+        value: "300"
+      - key: SKEDDY_CMD_CREATE_TEMPLATE
+        value: "{{title}} at {{date}} {{start}} {{tag}}"
+      - key: SKEDDY_CMD_UPDATE_TEMPLATE
+        value: "{{title}} at {{date}} {{start}} {{tag}}"
+      - key: SKEDDY_SEND_DELETE_BEFORE_UPDATE
+        value: "false"
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: TELEGRAM_SESSION_STRING
+        sync: false
+      - key: SKEDDY_RELAY_WEBHOOK_SECRET
+        sync: false
+

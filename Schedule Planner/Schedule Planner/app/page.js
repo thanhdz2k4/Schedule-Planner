@@ -96,6 +96,21 @@ function toMonthValue(date) {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
 }
 
+function openPickerIfSupported(event) {
+  const input = event.currentTarget;
+  if (!(input instanceof HTMLInputElement)) {
+    return;
+  }
+
+  if (typeof input.showPicker === "function") {
+    try {
+      input.showPicker();
+    } catch {
+      // Ignore when browser blocks picker invocation.
+    }
+  }
+}
+
 function getDaySeries(tasks, locale, anchorISODate) {
   const anchor = parseISODate(anchorISODate) || new Date();
   const labels = [];
@@ -291,6 +306,7 @@ export default function DashboardPage() {
             <input
               type="date"
               value={selectedDate}
+              onClick={openPickerIfSupported}
               onChange={(event) => {
                 const next = event.target.value;
                 setSelectedDate(next);
@@ -305,6 +321,7 @@ export default function DashboardPage() {
             <input
               type="month"
               value={selectedMonth}
+              onClick={openPickerIfSupported}
               onChange={(event) => {
                 const next = event.target.value;
                 setSelectedMonth(next);

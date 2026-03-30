@@ -1,0 +1,14 @@
+{
+  "name": "skeddy-user-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs",
+    "session": "node scripts/generate-session.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "telegram": "^2.26.22"
+  }
+}

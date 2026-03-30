@@ -289,6 +289,21 @@ function isDeleteShortcut(event) {
   );
 }
 
+function openDatePickerIfSupported(event) {
+  const input = event.currentTarget;
+  if (!(input instanceof HTMLInputElement)) {
+    return;
+  }
+
+  if (typeof input.showPicker === "function") {
+    try {
+      input.showPicker();
+    } catch {
+      // Ignore when browser blocks picker invocation.
+    }
+  }
+}
+
 function blurEditableActiveElement() {
   if (typeof document === "undefined") return;
   const active = document.activeElement;
@@ -1128,7 +1143,13 @@ export default function DailyPage() {
         </div>
 
         <form className="grid-form" onSubmit={submitTask}>
-          <input type="date" value={form.date} onChange={(event) => handleDateChange(event.target.value)} required />
+          <input
+            type="date"
+            value={form.date}
+            onClick={openDatePickerIfSupported}
+            onChange={(event) => handleDateChange(event.target.value)}
+            required
+          />
           <input
             type="text"
             placeholder={copy.taskPlaceholder}

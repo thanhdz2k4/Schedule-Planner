@@ -11,7 +11,12 @@ import {
   getIntegrationConnectionByConnectionId,
   listActiveIntegrationConnectionsByIntegration,
 } from "@/lib/db/queries/integrationConnectionQueries";
-import { listNotificationChannelSettingsByChannelAndDestination } from "@/lib/db/queries/notificationChannelSettingQueries";
+import {
+  ensureDefaultNotificationChannelSettings,
+  getNotificationChannelSettingByUser,
+  listNotificationChannelSettingsByChannelAndDestination,
+  upsertNotificationChannelSetting,
+} from "@/lib/db/queries/notificationChannelSettingQueries";
 import { ensureUserExists } from "@/lib/db/users";
 import { convertTextToTelegramHtml } from "@/lib/integrations/telegramHtml";
 import { sendTelegramReminder, TelegramSendError } from "@/lib/integrations/telegramSender";
@@ -268,9 +273,31 @@ async function resolveTelegramConnection(db, { connectionId, chatId }) {
   );
 }
 
+async function ensureTelegramReminderDestination(db, { userId, chatId }) {
+  await ensureDefaultNotificationChannelSettings(db, userId);
+
+  const currentSetting = await getNotificationChannelSettingByUser(db, userId, "telegram");
+  const currentDestination = typeof currentSetting?.destination === "string" ? currentSetting.destination.trim() : "";
+  if (currentDestination) {
+    return currentSetting;
+  }
+
+  return upsertNotificationChannelSetting(db, {
+    userId,
+    channel: "telegram",
+    isEnabled: currentSetting?.isEnabled ?? true,
+    priorityOrder: currentSetting?.priorityOrder ?? 1,
+    destination: chatId,
+  });
+}
+
 async function persistInboundMessage({ connection, chatId, title, userText, inboundExternalMessageId, rawPayload }) {
   return withTransaction(async (db) => {
     await ensureUserExists(db, connection.userId);
+    await ensureTelegramReminderDestination(db, {
+      userId: connection.userId,
+      chatId,
+    });
 
     const thread = await upsertChatThreadByUserAndExternalChatId(db, {
       userId: connection.userId,

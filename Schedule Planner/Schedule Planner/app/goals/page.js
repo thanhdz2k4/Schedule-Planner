@@ -33,6 +33,21 @@ const COPY = {
   },
 };
 
+function openDatePickerIfSupported(event) {
+  const input = event.currentTarget;
+  if (!(input instanceof HTMLInputElement)) {
+    return;
+  }
+
+  if (typeof input.showPicker === "function") {
+    try {
+      input.showPicker();
+    } catch {
+      // Ignore when browser blocks picker invocation.
+    }
+  }
+}
+
 export default function GoalsPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
   const [locale] = useUiLocale();
@@ -92,6 +107,7 @@ export default function GoalsPage() {
           <input
             type="date"
             value={form.deadline}
+            onClick={openDatePickerIfSupported}
             onChange={(event) => setForm({ ...form, deadline: event.target.value })}
             required
           />
@@ -132,4 +148,3 @@ export default function GoalsPage() {
     </AppShell>
   );
 }
-

@@ -23,8 +23,8 @@
   --ring: rgba(14, 111, 93, 0.2);
   --shadow: 0 24px 52px rgba(40, 62, 36, 0.16);
   --shadow-soft: 0 10px 24px rgba(40, 62, 36, 0.08);
-  --cursor-default: url("../images/icons8-pointer-48.png") 7 5, auto;
-  --cursor-pointer: url("../images/icons8-pointer-48.png") 7 3, pointer;
+  --cursor-default: url("../images/icons8-overview-100.png") 8 8, url("../images/icons8-pointer-48.png") 7 5, auto;
+  --cursor-pointer: url("../images/icons8-overview-100.png") 8 8, url("../images/icons8-pointer-48.png") 7 3, pointer;
   --cursor-text: url("../images/icons8-hand-cursor-48.png") 7 3, text;
 }
 
@@ -59,6 +59,7 @@ body.dark {
 *::before,
 *::after {
   box-sizing: border-box;
+  cursor: var(--cursor-default);
 }
 
 html,
@@ -120,6 +121,11 @@ summary,
 label,
 .task-card,
 .month-task-chip {
+  cursor: var(--cursor-pointer) !important;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
   cursor: var(--cursor-pointer) !important;
 }
 
@@ -339,7 +345,7 @@ body.dark .brand-dot {
   font-size: 0.7rem;
   font-weight: 700;
   padding: 3px 6px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
@@ -545,7 +551,7 @@ body.dark .brand-dot {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
 }
 
@@ -610,7 +616,7 @@ body.dark .brand-dot {
   font-size: 0.78rem;
   font-weight: 700;
   padding: 6px 12px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
 
@@ -639,7 +645,7 @@ body.dark .brand-dot {
   font-size: 0.78rem;
   font-weight: 700;
   padding: 7px 11px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .month-nav-btn:hover {
@@ -755,7 +761,7 @@ body.dark .brand-dot {
   display: grid;
   justify-items: start;
   gap: 2px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   min-width: 0;
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
@@ -886,7 +892,7 @@ body.dark .brand-dot {
   color: #ffffff !important;
   font-weight: 700;
   letter-spacing: 0.01em;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
 }
 
@@ -910,7 +916,7 @@ body.dark .brand-dot {
   border: none;
   background: transparent;
   color: var(--ink);
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   text-decoration: underline;
   text-underline-offset: 3px;
   padding: 0;
@@ -968,7 +974,7 @@ body.dark .brand-dot {
   font-size: 0.76rem;
   font-weight: 700;
   padding: 7px 11px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .integration-filters button.active {
@@ -1708,18 +1714,63 @@ body.dark .brand-dot {
 .task-check {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  cursor: url("../images/icons8-pointer-48.png") 7 3, pointer !important;
   color: var(--muted);
   font-size: 0.69rem;
   font-weight: 600;
   white-space: nowrap;
+  min-height: 28px;
+  padding: 2px 4px;
+  border-radius: 999px;
 }
 
 .task-check input {
   margin: 0;
-  accent-color: var(--accent);
-  inline-size: 13px;
-  block-size: 13px;
+  -webkit-appearance: none;
+  appearance: none;
+  inline-size: 20px;
+  block-size: 20px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  display: grid;
+  place-content: center;
+  cursor: url("../images/icons8-pointer-48.png") 7 3, pointer !important;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.1s ease;
+}
+
+.task-check input::before {
+  content: "";
+  inline-size: 10px;
+  block-size: 6px;
+  border-left: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  transform: rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform 0.12s ease;
+}
+
+.task-check input:hover {
+  border-color: var(--accent);
+}
+
+.task-check input:checked {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+}
+
+.task-check input:checked::before {
+  transform: rotate(-45deg) scale(1);
+}
+
+.task-check input:active {
+  transform: scale(0.96);
+}
+
+.task-check input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .task-action-buttons {
@@ -1766,7 +1817,7 @@ body.dark .brand-dot {
   padding: 1px 6px;
   font-size: 0.56rem;
   font-weight: 700;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   white-space: nowrap;
 }
 
@@ -1827,7 +1878,7 @@ body.dark .brand-dot {
   font-size: 0.78rem;
   font-weight: 700;
   padding: 7px 9px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .task-context-menu button:hover {
@@ -1846,11 +1897,15 @@ body.dark .brand-dot {
 
 .task-check.tiny {
   gap: 0;
+  inline-size: 30px;
+  block-size: 30px;
+  justify-content: center;
+  padding: 0;
 }
 
 .task-check.tiny input {
-  inline-size: 12px;
-  block-size: 12px;
+  inline-size: 20px;
+  block-size: 20px;
 }
 
 .alert {
@@ -2032,7 +2087,7 @@ body.dark .brand-dot {
   font-size: 0.76rem;
   font-weight: 700;
   padding: 6px 8px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
 
@@ -2081,7 +2136,7 @@ body.dark .brand-dot {
   font-size: 0.78rem;
   font-weight: 700;
   padding: 6px 10px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
 
@@ -3658,7 +3713,7 @@ body.dragging-task * {
   font-size: 0.74rem;
   font-weight: 700;
   padding: 7px 11px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .proactive-actions-filter-row button.active {

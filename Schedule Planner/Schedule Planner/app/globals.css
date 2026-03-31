@@ -23,8 +23,8 @@
   --ring: rgba(14, 111, 93, 0.2);
   --shadow: 0 24px 52px rgba(40, 62, 36, 0.16);
   --shadow-soft: 0 10px 24px rgba(40, 62, 36, 0.08);
-  --cursor-default: url("../images/icons8-overview-100.png") 8 8, url("../images/icons8-pointer-48.png") 7 5, auto;
-  --cursor-pointer: url("../images/icons8-overview-100.png") 8 8, url("../images/icons8-pointer-48.png") 7 3, pointer;
+  --cursor-default: url("../images/icons8-pointer-48.png") 7 5, auto;
+  --cursor-pointer: url("../images/icons8-pointer-48.png") 7 3, pointer;
   --cursor-text: url("../images/icons8-hand-cursor-48.png") 7 3, text;
 }
 

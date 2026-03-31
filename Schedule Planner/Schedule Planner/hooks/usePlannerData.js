@@ -389,8 +389,65 @@ export function usePlannerData() {
     };
   }, [loaded, userId, authToken, switchToAnonymousSession]);
 
-  const actions = useMemo(
-    () => ({
+  const actions = useMemo(() => {
+    function moveTasksByIds(taskIds, deltaMinutes) {
+      const ids = Array.isArray(taskIds) ? taskIds : [taskIds];
+      const uniqueIds = [...new Set(ids.filter((id) => typeof id === "string" && id))];
+      if (!uniqueIds.length || !Number.isFinite(deltaMinutes)) {
+        return { ok: false };
+      }
+
+      const current = stateRef.current;
+      const selectedSet = new Set(uniqueIds);
+      const selectedTasks = current.tasks.filter((task) => selectedSet.has(task.id));
+      if (!selectedTasks.length) {
+        return { ok: false };
+      }
+
+      let minDelta = -Infinity;
+      let maxDelta = Infinity;
+
+      for (const task of selectedTasks) {
+        const duration = taskDurationMinutes(task);
+        const startMinutes = toMinutes(task.start);
+        minDelta = Math.max(minDelta, -startMinutes);
+        maxDelta = Math.min(maxDelta, 1440 - duration - startMinutes);
+      }
+
+      const boundedDelta = Math.max(minDelta, Math.min(maxDelta, deltaMinutes));
+      if (!Number.isFinite(boundedDelta) || boundedDelta === 0) {
+        return { ok: true, moved: false, appliedDelta: 0 };
+      }
+
+      const movedTaskById = new Map();
+      for (const task of selectedTasks) {
+        const duration = taskDurationMinutes(task);
+        const nextStart = toMinutes(task.start) + boundedDelta;
+        movedTaskById.set(task.id, {
+          ...task,
+          start: toHHMM(nextStart),
+          end: toHHMM(nextStart + duration),
+        });
+      }
+
+      const nonSelectedTasks = current.tasks.filter((task) => !selectedSet.has(task.id));
+      for (const movedTask of movedTaskById.values()) {
+        if (hasOverlap(nonSelectedTasks, movedTask)) {
+          return { ok: false, message: "Không thể kéo vì bị trùng giờ." };
+        }
+      }
+
+      const next = {
+        ...current,
+        tasks: current.tasks.map((task) => movedTaskById.get(task.id) || task),
+      };
+
+      stateRef.current = next;
+      setState(next);
+      return { ok: true, moved: true, appliedDelta: boundedDelta };
+    }
+
+    return {
       addTask(payload) {
         const current = stateRef.current;
         const next = { ...current, tasks: [...current.tasks] };
@@ -502,33 +559,12 @@ export function usePlannerData() {
         stateRef.current = next;
         setState(next);
       },
+      moveTasks(taskIds, deltaMinutes) {
+        return moveTasksByIds(taskIds, deltaMinutes);
+      },
 
       moveTask(id, deltaMinutes) {
-        const current = stateRef.current;
-        const original = current.tasks.find((task) => task.id === id);
-        if (!original) return { ok: false };
-
-        const duration = taskDurationMinutes(original);
-        let nextStart = toMinutes(original.start) + deltaMinutes;
-        nextStart = Math.max(0, Math.min(1440 - duration, nextStart));
-
-        const payload = {
-          ...original,
-          start: toHHMM(nextStart),
-          end: toHHMM(nextStart + duration),
-        };
-
-        if (hasOverlap(current.tasks, payload, id)) {
-          return { ok: false, message: "Không thể kéo vì bị trùng giờ." };
-        }
-
-        const next = {
-          ...current,
-          tasks: current.tasks.map((task) => (task.id === id ? { ...task, ...payload } : task)),
-        };
-        stateRef.current = next;
-        setState(next);
-        return { ok: true };
+        return moveTasksByIds([id], deltaMinutes);
       },
 
       addGoal(payload) {
@@ -557,9 +593,8 @@ export function usePlannerData() {
         document.body.classList.toggle("dark", next);
         localStorage.setItem(THEME_KEY, next ? "dark" : "light");
       },
-    }),
-    [darkMode]
-  );
+    };
+  }, [darkMode]);
 
   const computed = useMemo(() => {
     const tasks = state.tasks;
@@ -588,3 +623,4 @@ export function usePlannerData() {
     actions,
   };
 }
+

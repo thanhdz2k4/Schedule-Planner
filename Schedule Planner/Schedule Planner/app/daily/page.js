@@ -968,14 +968,25 @@ export default function DailyPage() {
 
   function onTaskSelect(event, task, options = {}) {
     if (!options.allowButtonTarget && isTaskControlTarget(event.target)) {
-      return;
+      return [];
     }
 
     blurEditableActiveElement();
     setTaskContextMenu(null);
 
     const isMultiSelect = event.ctrlKey || event.metaKey;
-    updateSelectedTaskIds((prev) => getNextSelectedIdsForTask(task.id, isMultiSelect, prev));
+    const currentSelectedIds = selectedTaskIdsRef.current;
+    const keepCurrentSelection =
+      Boolean(options.preserveExistingMultiSelection) &&
+      !isMultiSelect &&
+      currentSelectedIds.includes(task.id) &&
+      currentSelectedIds.length > 1;
+    const nextSelectedIds = keepCurrentSelection
+      ? currentSelectedIds
+      : getNextSelectedIdsForTask(task.id, isMultiSelect, currentSelectedIds);
+
+    updateSelectedTaskIds(nextSelectedIds);
+    return nextSelectedIds;
   }
 
   function runTaskContextAction(action) {
@@ -1042,12 +1053,19 @@ export default function DailyPage() {
     }, 1400);
   }
 
-  function onDragStart(event, task) {
+  function onDragStart(event, task, taskIds = [task.id]) {
     if (isTaskControlTarget(event.target)) {
       return;
     }
     event.preventDefault();
-    setDrag({ taskId: task.id, startY: event.clientY });
+    const normalizedTaskIds = Array.isArray(taskIds)
+      ? [...new Set(taskIds.filter((taskId) => typeof taskId === "string" && taskId))]
+      : [task.id];
+    setDrag({
+      taskId: task.id,
+      taskIds: normalizedTaskIds.length ? normalizedTaskIds : [task.id],
+      startY: event.clientY,
+    });
   }
 
   function onDragMove(event) {
@@ -1057,12 +1075,14 @@ export default function DailyPage() {
     const deltaMinutes = Math.round((deltaY / HOUR_HEIGHT) * 2) * 30;
     if (deltaMinutes === 0) return;
 
-    const result = actions.moveTask(drag.taskId, deltaMinutes);
+    const dragTaskIds =
+      Array.isArray(drag.taskIds) && drag.taskIds.length > 0 ? drag.taskIds : [drag.taskId];
+    const result = actions.moveTasks(dragTaskIds, deltaMinutes);
     if (!result.ok && result.message) {
       setAlert(localizeActionMessage(result.message, locale, copy));
     } else {
       setAlert("");
-      setDrag({ ...drag, startY: event.clientY });
+      setDrag((prev) => (prev ? { ...prev, startY: event.clientY } : prev));
     }
   }
 
@@ -1292,8 +1312,13 @@ export default function DailyPage() {
                           if (event.button !== 0) {
                             return;
                           }
-                          onTaskSelect(event, task);
-                          onDragStart(event, task);
+                          const nextSelectedIds = onTaskSelect(event, task, {
+                            preserveExistingMultiSelection: true,
+                          });
+                          if (event.ctrlKey || event.metaKey) {
+                            return;
+                          }
+                          onDragStart(event, task, nextSelectedIds);
                         }}
                         onContextMenu={(event) => onTaskContextMenu(event, task)}
                         onDoubleClick={() => onEdit(task)}

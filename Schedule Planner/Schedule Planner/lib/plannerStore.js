@@ -24,6 +24,7 @@ export function defaultState() {
         id: crypto.randomUUID(),
         date: today,
         title: "Học Spark Streaming",
+        details: "Hoàn thành phần checkpointing và ghi chú lại các bước cấu hình.",
         start: "08:00",
         end: "10:00",
         status: "doing",
@@ -34,6 +35,7 @@ export function defaultState() {
         id: crypto.randomUUID(),
         date: today,
         title: "Code feature login",
+        details: "Xử lý validation và flow đăng nhập sai mật khẩu.",
         start: "14:00",
         end: "16:00",
         status: "todo",
@@ -44,6 +46,7 @@ export function defaultState() {
         id: crypto.randomUUID(),
         date: today,
         title: "Đọc tài liệu system design",
+        details: "Đọc phần scaling và ghi lại các trade-off quan trọng.",
         start: "20:00",
         end: "21:30",
         status: "todo",
@@ -130,8 +133,14 @@ export function loadState() {
 
   try {
     const parsed = JSON.parse(raw);
+    const normalizedTasks = Array.isArray(parsed.tasks)
+      ? parsed.tasks.map((task) => ({
+          ...task,
+          details: typeof task?.details === "string" ? task.details : "",
+        }))
+      : [];
     const state = {
-      tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+      tasks: normalizedTasks,
       goals: Array.isArray(parsed.goals) ? parsed.goals : [],
     };
     syncGoalProgress(state);

@@ -64,6 +64,9 @@ const PRIORITY_LABELS = {
   en: { high: "High", medium: "Medium", low: "Low" },
 };
 
+const PART_HEADING_REGEX = /^[^a-z0-9]*part\s+\d+\s*:/i;
+const QA_MARKER_REGEX = /^question\s*(and|&)\s*answer\s*:?/i;
+
 const COPY = {
   vi: {
     quote: "Lên kế hoạch trước khi ngày mới bắt đầu.",
@@ -77,6 +80,20 @@ const COPY = {
     monthPrev: "Tháng trước",
     monthNext: "Tháng sau",
     taskPlaceholder: "Tên task",
+    action: "Action",
+    detailPanelTitle: "Chi tiết task",
+    closeDetails: "Đóng",
+    saveDetails: "Lưu chi tiết",
+    detailsPlaceholder: "Nhập note chi tiết cho task này...",
+    detailStudyMode: "Học",
+    detailEditMode: "Sửa",
+    revealAnswer: "Hiện đáp án",
+    hideAnswer: "Ẩn đáp án",
+    revealAllAnswers: "Hiện tất cả",
+    hideAllAnswers: "Ẩn tất cả",
+    questionLabel: "Câu hỏi",
+    answerLabel: "Đáp án",
+    noQuestionAnswer: "Chưa có phần Question & Answer trong note.",
     noGoal: "Không gắn mục tiêu",
     addTask: "Thêm task",
     updateTask: "Cập nhật task",
@@ -129,6 +146,20 @@ const COPY = {
     monthPrev: "Previous month",
     monthNext: "Next month",
     taskPlaceholder: "Task title",
+    action: "Action",
+    detailPanelTitle: "Task details",
+    closeDetails: "Close",
+    saveDetails: "Save details",
+    detailsPlaceholder: "Add detailed notes for this task...",
+    detailStudyMode: "Study",
+    detailEditMode: "Edit",
+    revealAnswer: "Show answer",
+    hideAnswer: "Hide answer",
+    revealAllAnswers: "Reveal all",
+    hideAllAnswers: "Hide all",
+    questionLabel: "Question",
+    answerLabel: "Answer",
+    noQuestionAnswer: "No Question & Answer section found in this note.",
     noGoal: "No goal",
     addTask: "Add task",
     updateTask: "Update task",
@@ -448,6 +479,104 @@ function getRangeLabel(mode, dates, monthBoard, locale) {
   return `${formatDisplayDate(dates[0].date, locale)} - ${formatDisplayDate(dates[dates.length - 1].date, locale)}`;
 }
 
+function normalizeTextLines(text) {
+  if (typeof text !== "string") {
+    return [];
+  }
+
+  return text
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim());
+}
+
+function normalizePartHeading(line) {
+  return line.replace(/^[^a-z0-9]*/i, "");
+}
+
+function parseStudySections(lines) {
+  const sections = [];
+  let current = null;
+
+  for (const line of lines) {
+    if (!line) {
+      continue;
+    }
+
+    if (PART_HEADING_REGEX.test(line)) {
+      current = { title: normalizePartHeading(line), items: [] };
+      sections.push(current);
+      continue;
+    }
+
+    if (!current) {
+      current = { title: "General", items: [] };
+      sections.push(current);
+    }
+
+    current.items.push(line);
+  }
+
+  return sections;
+}
+
+function parseQuestionAnswerSections(lines) {
+  const sections = [];
+  let current = { title: "Q&A", pairs: [] };
+  let pairCount = 0;
+
+  for (const line of lines) {
+    if (!line) {
+      continue;
+    }
+
+    if (PART_HEADING_REGEX.test(line)) {
+      if (current.pairs.length) {
+        sections.push(current);
+      }
+      current = { title: normalizePartHeading(line), pairs: [] };
+      continue;
+    }
+
+    const questionMatch = line.match(/^q\s*:\s*(.+)$/i);
+    if (questionMatch) {
+      pairCount += 1;
+      current.pairs.push({
+        id: `${sections.length}-${pairCount}`,
+        question: questionMatch[1].trim(),
+        answer: "",
+      });
+      continue;
+    }
+
+    const answerMatch = line.match(/^a\s*:\s*(.+)$/i);
+    if (answerMatch) {
+      const last = current.pairs[current.pairs.length - 1];
+      if (last) {
+        last.answer = answerMatch[1].trim();
+      }
+    }
+  }
+
+  if (current.pairs.length) {
+    sections.push(current);
+  }
+
+  return sections;
+}
+
+function parseStudyDetail(text) {
+  const lines = normalizeTextLines(text);
+  const qaIndex = lines.findIndex((line) => QA_MARKER_REGEX.test(line));
+  const contentLines = qaIndex >= 0 ? lines.slice(0, qaIndex) : lines;
+  const qaLines = qaIndex >= 0 ? lines.slice(qaIndex + 1) : [];
+
+  return {
+    sections: parseStudySections(contentLines),
+    qaSections: parseQuestionAnswerSections(qaLines),
+  };
+}
+
 export default function DailyPage() {
   const { loaded, darkMode, state, actions } = usePlannerData();
   const [locale] = useUiLocale();
@@ -461,6 +590,10 @@ export default function DailyPage() {
   const [selectedTaskIds, setSelectedTaskIds] = useState([]);
   const [taskClipboard, setTaskClipboard] = useState({ baseDate: todayISO(), tasks: [] });
   const [taskContextMenu, setTaskContextMenu] = useState(null);
+  const [detailTaskId, setDetailTaskId] = useState("");
+  const [detailMode, setDetailMode] = useState("study");
+  const [revealedAnswerIds, setRevealedAnswerIds] = useState([]);
+  const [detailForm, setDetailForm] = useState({ details: "" });
   const selectedTaskIdsRef = useRef([]);
   const taskClipboardRef = useRef({ baseDate: todayISO(), tasks: [] });
   const taskContextMenuRef = useRef(null);
@@ -510,6 +643,8 @@ export default function DailyPage() {
     [state.goals]
   );
   const taskById = useMemo(() => new Map(state.tasks.map((task) => [task.id, task])), [state.tasks]);
+  const detailTask = detailTaskId ? taskById.get(detailTaskId) : null;
+  const detailStudy = useMemo(() => parseStudyDetail(detailForm.details), [detailForm.details]);
   const monthBoard = useMemo(() => buildMonthBoard(form.date, locale), [form.date, locale]);
   const monthTasksByDate = useMemo(() => {
     const map = new Map();
@@ -689,7 +824,11 @@ export default function DailyPage() {
       const taskIds = Array.isArray(prev.taskIds) ? prev.taskIds : [];
       return taskIds.some((taskId) => taskIdSet.has(taskId)) ? prev : null;
     });
-  }, [state.tasks]);
+
+    if (detailTaskId && !taskIdSet.has(detailTaskId)) {
+      setDetailTaskId("");
+    }
+  }, [state.tasks, detailTaskId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -702,6 +841,7 @@ export default function DailyPage() {
 
       if (key === "escape") {
         setTaskContextMenu(null);
+        setDetailTaskId("");
       }
 
       if (isDeleteShortcut(event) && !isEditingField) {
@@ -814,7 +954,83 @@ export default function DailyPage() {
   function resetEdit() {
     setEditingId("");
     setAlert("");
-    setForm({ ...form, title: "", start: "08:00", end: "09:00", status: "todo", priority: "medium", goalId: "" });
+    setForm({
+      ...form,
+      title: "",
+      start: "08:00",
+      end: "09:00",
+      status: "todo",
+      priority: "medium",
+      goalId: "",
+    });
+  }
+
+  function openTaskDetails(task) {
+    setDetailTaskId(task.id);
+    setDetailMode("study");
+    setRevealedAnswerIds([]);
+    setDetailForm({ details: task.details || "" });
+  }
+
+  function closeTaskDetails() {
+    setDetailTaskId("");
+    setRevealedAnswerIds([]);
+  }
+
+  function toggleAnswer(answerId) {
+    setRevealedAnswerIds((prev) =>
+      prev.includes(answerId) ? prev.filter((id) => id !== answerId) : [...prev, answerId]
+    );
+  }
+
+  function revealAllAnswers() {
+    const allIds = detailStudy.qaSections.flatMap((section) => section.pairs.map((pair) => pair.id));
+    setRevealedAnswerIds(allIds);
+  }
+
+  function hideAllAnswers() {
+    setRevealedAnswerIds([]);
+  }
+
+  function saveTaskDetails(event) {
+    event.preventDefault();
+    if (!detailTaskId || !detailTask) {
+      return;
+    }
+
+    const payload = {
+      date: detailTask.date,
+      title: detailTask.title,
+      start: detailTask.start,
+      end: detailTask.end,
+      status: detailTask.status,
+      priority: detailTask.priority,
+      goalId: detailTask.goalId || "",
+      details: (detailForm.details || "").trim(),
+    };
+
+    const result = actions.updateTask(detailTaskId, payload);
+    if (!result.ok) {
+      setAlert(localizeActionMessage(result.message, locale, copy));
+      return;
+    }
+
+    setAlert("");
+    setEditingId("");
+    setDetailTaskId("");
+  }
+
+  function deleteTaskFromDetails() {
+    if (!detailTaskId) {
+      return;
+    }
+
+    actions.deleteTask(detailTaskId);
+    if (editingId === detailTaskId) {
+      setEditingId("");
+    }
+    setDetailTaskId("");
+    setAlert(buildDeletedAlert(locale, copy, 1));
   }
 
   function getSelectedTasks(taskIds = selectedTaskIds) {
@@ -836,6 +1052,7 @@ export default function DailyPage() {
     const clipboardTasks = selectedTasks.map((task) => ({
       date: task.date,
       title: task.title,
+      details: task.details || "",
       start: task.start,
       end: task.end,
       status: task.status,
@@ -868,6 +1085,7 @@ export default function DailyPage() {
         const candidate = {
           date: task.date,
           title: task.title,
+          details: task.details || "",
           start: toHHMM(nextStart),
           end: toHHMM(nextStart + duration),
           status: task.status,
@@ -1241,7 +1459,7 @@ export default function DailyPage() {
                             onClick={(event) => onTaskSelect(event, task, { allowButtonTarget: true })}
                             onContextMenu={(event) => onTaskContextMenu(event, task, { allowButtonTarget: true })}
                             onDoubleClick={() => onEdit(task)}
-                            title={`${task.start}-${task.end} | ${task.title} (${getStatusLabel(locale, task.status)}, ${copy.priorityWord} ${getPriorityLabel(locale, task.priority)})`}
+                            title={`${task.start}-${task.end} | ${task.title}${task.details ? ` - ${task.details}` : ""} (${getStatusLabel(locale, task.status)}, ${copy.priorityWord} ${getPriorityLabel(locale, task.priority)})`}
                           >
                             <span className="month-task-time">{task.start}</span>
                             <span className="month-task-title">{task.title}</span>
@@ -1326,14 +1544,14 @@ export default function DailyPage() {
                       >
                       {isRangeMode && isTiny ? (
                         <div className="task-week-mini">
-                          <strong title={`${task.title} (${task.start} - ${task.end})`}>{task.title}</strong>
+                          <strong title={`${task.title}${task.details ? ` - ${task.details}` : ""} (${task.start} - ${task.end})`}>{task.title}</strong>
                           <span className="task-week-mini-time">
                             {task.start} - {task.end}
                           </span>
                         </div>
                       ) : isTiny ? (
                         <div className="task-tiny-row">
-                          <strong title={`${task.title} (${task.start} - ${task.end})`}>
+                          <strong title={`${task.title}${task.details ? ` - ${task.details}` : ""} (${task.start} - ${task.end})`}>
                             {task.title} · {task.start} - {task.end}
                           </strong>
                           <div className="task-meta-row task-meta-row-tiny">
@@ -1354,6 +1572,9 @@ export default function DailyPage() {
                               />
                             </label>
                             <div className="task-action-buttons">
+                              <button className="task-action-btn" type="button" onClick={() => openTaskDetails(task)}>
+                                {copy.action}
+                              </button>
                               <button className="task-action-btn" type="button" onClick={() => onEdit(task)}>
                                 {copy.edit}
                               </button>
@@ -1395,6 +1616,7 @@ export default function DailyPage() {
                               <span className="badge task-status-badge">{getStatusLabel(locale, task.status)}</span>
                             </div>
                           </div>
+                          {task.details ? <p className="task-details-preview">{task.details}</p> : null}
                         </>
                       )}
 
@@ -1409,6 +1631,9 @@ export default function DailyPage() {
                             {isCompact ? null : <span>{copy.completedLabel}</span>}
                           </label>
                           <div className="task-action-buttons">
+                            <button className="task-action-btn" type="button" onClick={() => openTaskDetails(task)}>
+                              {copy.action}
+                            </button>
                             <button className="task-action-btn" type="button" onClick={() => onEdit(task)}>
                               {copy.edit}
                             </button>
@@ -1434,6 +1659,104 @@ export default function DailyPage() {
             </div>
           )}
         </div>
+        {detailTask ? (
+          <aside className="task-detail-drawer" role="dialog" aria-modal="false" aria-label={copy.detailPanelTitle}>
+            <div className="task-detail-drawer-head">
+              <h4>{copy.detailPanelTitle}</h4>
+              <button type="button" className="task-action-btn" onClick={closeTaskDetails}>
+                {copy.closeDetails}
+              </button>
+            </div>
+            <form className="task-detail-form" onSubmit={saveTaskDetails}>
+              <div className="task-detail-learn-toolbar" role="tablist" aria-label={copy.detailPanelTitle}>
+                <button
+                  type="button"
+                  className={`task-detail-learn-tab${detailMode === "study" ? " active" : ""}`}
+                  onClick={() => setDetailMode("study")}
+                >
+                  {copy.detailStudyMode}
+                </button>
+                <button
+                  type="button"
+                  className={`task-detail-learn-tab${detailMode === "edit" ? " active" : ""}`}
+                  onClick={() => setDetailMode("edit")}
+                >
+                  {copy.detailEditMode}
+                </button>
+              </div>
+
+              {detailMode === "study" ? (
+                <div className="task-detail-study-view" aria-live="polite">
+                  <div className="task-detail-study-sections">
+                    {detailStudy.sections.map((section) => (
+                      <article className="task-detail-study-section" key={section.title}>
+                        <h5>{section.title}</h5>
+                        {section.items.map((item, index) => (
+                          <p key={`${section.title}-${index}`}>{item}</p>
+                        ))}
+                      </article>
+                    ))}
+                  </div>
+
+                  {detailStudy.qaSections.length ? (
+                    <section className="task-detail-qa-zone">
+                      <div className="task-detail-qa-head">
+                        <strong>Q&A</strong>
+                        <div className="task-detail-qa-actions">
+                          <button type="button" className="task-action-btn" onClick={revealAllAnswers}>
+                            {copy.revealAllAnswers}
+                          </button>
+                          <button type="button" className="task-action-btn" onClick={hideAllAnswers}>
+                            {copy.hideAllAnswers}
+                          </button>
+                        </div>
+                      </div>
+                      {detailStudy.qaSections.map((section) => (
+                        <article className="task-detail-qa-section" key={section.title}>
+                          <h6>{section.title}</h6>
+                          {section.pairs.map((pair) => {
+                            const revealed = revealedAnswerIds.includes(pair.id);
+                            return (
+                              <div className="task-detail-qa-item" key={pair.id}>
+                                <p>
+                                  <strong>{copy.questionLabel}:</strong> {pair.question}
+                                </p>
+                                <button
+                                  type="button"
+                                  className="task-action-btn"
+                                  onClick={() => toggleAnswer(pair.id)}
+                                >
+                                  {revealed ? copy.hideAnswer : copy.revealAnswer}
+                                </button>
+                                <p className={`task-detail-answer${revealed ? " revealed" : ""}`}>
+                                  <strong>{copy.answerLabel}:</strong> {revealed ? pair.answer || "-" : "••••••••"}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </article>
+                      ))}
+                    </section>
+                  ) : (
+                    <p className="muted">{copy.noQuestionAnswer}</p>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  value={detailForm.details}
+                  placeholder={copy.detailsPlaceholder}
+                  onChange={(event) => setDetailForm({ ...detailForm, details: event.target.value })}
+                  rows={14}
+                />
+              )}
+              <div className="task-detail-form-actions">
+                <button type="submit" className="btn">
+                  {copy.saveDetails}
+                </button>
+              </div>
+            </form>
+          </aside>
+        ) : null}
         {taskContextMenu ? (
           <div
             ref={taskContextMenuRef}

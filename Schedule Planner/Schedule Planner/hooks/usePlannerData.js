@@ -17,9 +17,31 @@ import {
 const ACCOUNT_SYNC_INTERVAL_MS = 15000;
 
 function normalizeStateShape(input) {
+  const tasks = Array.isArray(input?.tasks)
+    ? input.tasks.map((task) => ({
+        ...task,
+        details: typeof task?.details === "string" ? task.details : "",
+      }))
+    : [];
+
   return {
-    tasks: Array.isArray(input?.tasks) ? input.tasks : [],
+    tasks,
     goals: Array.isArray(input?.goals) ? input.goals : [],
+  };
+}
+
+function normalizeTaskDetails(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
+}
+
+function normalizeTaskPayload(payload) {
+  return {
+    ...payload,
+    details: normalizeTaskDetails(payload?.details),
   };
 }
 
@@ -451,11 +473,12 @@ export function usePlannerData() {
       addTask(payload) {
         const current = stateRef.current;
         const next = { ...current, tasks: [...current.tasks] };
-        if (hasOverlap(next.tasks, payload)) {
+        const normalizedPayload = normalizeTaskPayload(payload);
+        if (hasOverlap(next.tasks, normalizedPayload)) {
           return { ok: false, message: "Task bị trùng giờ trong cùng ngày." };
         }
 
-        next.tasks.push({ id: crypto.randomUUID(), ...payload });
+        next.tasks.push({ id: crypto.randomUUID(), ...normalizedPayload });
         stateRef.current = next;
         setState(next);
         return { ok: true };
@@ -503,7 +526,7 @@ export function usePlannerData() {
             continue;
           }
 
-          const normalized = { ...payload, title };
+          const normalized = normalizeTaskPayload({ ...payload, title });
           if (hasOverlap(next.tasks, normalized)) {
             skipped += 1;
             continue;
@@ -531,11 +554,12 @@ export function usePlannerData() {
       updateTask(id, payload) {
         const current = stateRef.current;
         const next = { ...current, tasks: [...current.tasks] };
-        if (hasOverlap(next.tasks, payload, id)) {
+        const normalizedPayload = normalizeTaskPayload(payload);
+        if (hasOverlap(next.tasks, normalizedPayload, id)) {
           return { ok: false, message: "Task bị trùng giờ trong cùng ngày." };
         }
 
-        next.tasks = next.tasks.map((task) => (task.id === id ? { ...task, ...payload } : task));
+        next.tasks = next.tasks.map((task) => (task.id === id ? { ...task, ...normalizedPayload } : task));
         stateRef.current = next;
         setState(next);
         return { ok: true };

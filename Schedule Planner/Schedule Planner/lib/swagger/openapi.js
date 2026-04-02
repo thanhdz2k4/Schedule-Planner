@@ -10,6 +10,7 @@ const PLANNER_STATE_SCHEMA = {
         properties: {
           id: { type: "string", format: "uuid" },
           title: { type: "string" },
+          details: { type: "string", nullable: true },
           date: { type: "string", format: "date", example: "2026-03-30" },
           start: { type: "string", pattern: "^\\d{2}:\\d{2}$", example: "09:00" },
           end: { type: "string", pattern: "^\\d{2}:\\d{2}$", example: "10:00" },

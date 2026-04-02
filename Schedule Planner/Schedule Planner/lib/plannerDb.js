@@ -98,6 +98,14 @@ function normalizeTitle(value, fallback) {
   return trimmed ? trimmed : fallback;
 }
 
+function normalizeDetails(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
+}
+
 function normalizeGoal(rawGoal) {
   const parsedTarget = Number.parseInt(rawGoal?.target, 10);
 
@@ -117,6 +125,7 @@ function normalizeTask(rawTask, validGoalIds) {
   return {
     id: normalizeUuid(rawTask?.id) || crypto.randomUUID(),
     title: normalizeTitle(rawTask?.title, "Untitled task"),
+    details: normalizeDetails(rawTask?.details ?? rawTask?.detail ?? rawTask?.description),
     date: normalizeDate(rawTask?.date),
     start: window.start,
     end: window.end,

@@ -20,6 +20,7 @@ function mapTaskRow(row) {
   return {
     id: row.id,
     title: row.title,
+    details: row.details || "",
     date: toDateString(row.date),
     start: toTimeString(row.start_time),
     end: toTimeString(row.end_time),
@@ -43,7 +44,7 @@ async function selectTaskCandidates({ db, userId, title, date, exact }) {
 
   const result = await db.query(
     `
-      SELECT id, title, date, start_time, end_time, status, priority, priority_source, goal_id
+      SELECT id, title, details, date, start_time, end_time, status, priority, priority_source, goal_id
       FROM tasks
       WHERE user_id = $1::uuid
         AND ${comparator}
@@ -61,7 +62,7 @@ export async function resolveTaskTarget({ db, userId, taskId, title, date }) {
   if (taskId) {
     const result = await db.query(
       `
-        SELECT id, title, date, start_time, end_time, status, priority, priority_source, goal_id
+        SELECT id, title, details, date, start_time, end_time, status, priority, priority_source, goal_id
         FROM tasks
         WHERE user_id = $1::uuid AND id = $2::uuid
         LIMIT 1
@@ -121,6 +122,7 @@ export async function insertTask({ db, userId, payload }) {
       INSERT INTO tasks (
         user_id,
         title,
+        details,
         date,
         start_time,
         end_time,
@@ -132,17 +134,18 @@ export async function insertTask({ db, userId, payload }) {
       VALUES (
         $1::uuid,
         $2,
-        $3::date,
-        $4::time,
+        $3,
+        $4::date,
         $5::time,
-        $6,
+        $6::time,
         $7,
+        $8,
         'manual',
         NULL
       )
-      RETURNING id, title, date, start_time, end_time, status, priority, priority_source, goal_id
+      RETURNING id, title, details, date, start_time, end_time, status, priority, priority_source, goal_id
     `,
-    [userId, payload.title, payload.date, payload.start, payload.end, payload.status, payload.priority]
+    [userId, payload.title, payload.details || "", payload.date, payload.start, payload.end, payload.status, payload.priority]
   );
 
   return mapTaskRow(result.rows[0]);
@@ -156,6 +159,10 @@ export async function updateTaskById({ db, userId, taskId, patch }) {
   if (patch.title !== undefined) {
     fields.push(`title = $${parameterIndex++}`);
     values.push(patch.title);
+  }
+  if (patch.details !== undefined) {
+    fields.push(`details = $${parameterIndex++}`);
+    values.push(patch.details || "");
   }
   if (patch.date !== undefined) {
     fields.push(`date = $${parameterIndex++}::date`);
@@ -190,7 +197,7 @@ export async function updateTaskById({ db, userId, taskId, patch }) {
       UPDATE tasks
       SET ${fields.join(", ")}
       WHERE user_id = $1::uuid AND id = $2::uuid
-      RETURNING id, title, date, start_time, end_time, status, priority, priority_source, goal_id
+      RETURNING id, title, details, date, start_time, end_time, status, priority, priority_source, goal_id
     `,
     values
   );
@@ -211,7 +218,7 @@ export async function deleteTaskById({ db, userId, taskId }) {
     `
       DELETE FROM tasks
       WHERE user_id = $1::uuid AND id = $2::uuid
-      RETURNING id, title, date, start_time, end_time, status, priority, priority_source, goal_id
+      RETURNING id, title, details, date, start_time, end_time, status, priority, priority_source, goal_id
     `,
     [userId, taskId]
   );

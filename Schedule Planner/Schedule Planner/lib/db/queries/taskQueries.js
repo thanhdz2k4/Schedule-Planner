@@ -40,7 +40,7 @@ async function loadUserTimezone(db, userId) {
 export async function listTasksByUser(db, userId) {
   const result = await db.query(
     `
-      SELECT id, title, date, start_time, end_time, status, priority, priority_source, goal_id
+      SELECT id, title, details, date, start_time, end_time, status, priority, priority_source, goal_id
       FROM tasks
       WHERE user_id = $1
       ORDER BY date ASC, start_time ASC, created_at ASC
@@ -51,6 +51,7 @@ export async function listTasksByUser(db, userId) {
   return result.rows.map((row) => ({
     id: row.id,
     title: row.title,
+    details: row.details || "",
     date: toDateString(row.date),
     start: toTimeString(row.start_time),
     end: toTimeString(row.end_time),
@@ -71,6 +72,7 @@ export async function replaceTasksForUser(db, userId, tasks) {
           id,
           user_id,
           title,
+          details,
           date,
           start_time,
           end_time,
@@ -83,19 +85,21 @@ export async function replaceTasksForUser(db, userId, tasks) {
           $1::uuid,
           $2::uuid,
           $3,
-          $4::date,
-          $5::time,
+          $4,
+          $5::date,
           $6::time,
-          $7,
+          $7::time,
           $8,
           $9,
-          $10::uuid
+          $10,
+          $11::uuid
         )
       `,
       [
         task.id,
         userId,
         task.title,
+        task.details || "",
         task.date,
         task.start,
         task.end,
